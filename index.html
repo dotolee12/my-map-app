@@ -1,53 +1,76 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>나의 대동여지도 - 경로 연결</title>
+  <title>나의 대동여지도 - 지나간 길 표시</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    #map { height: 100vh; }
+    #map {
+      height: 100vh;
+      /* 기본 배경색을 어둡게 하여 타일이 매우 투명할 때도 어색하지 않도록 합니다. */
+      background-color: #333; 
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
-
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const map = L.map('map').setView([37.5665, 126.9780], 15); // 서울 중심
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap, CartoDB',
+    const map = L.map('map').setView([37.5665, 126.9780], 13); // 서울 중심
+
+    // 기본 지도 타일 레이어의 투명도를 낮춰 '안개' 효과를 줍니다.
+    // 0.0 (완전 투명) ~ 1.0 (완전 불투명) 사이 값으로 조절 가능
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      opacity: 0.1, // 이 값을 조절하여 배경 지도의 밝기를 변경하세요.
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // 이동 경로 저장할 배열
-    let path = [];
+    let userPathCoordinates = []; // 사용자의 경로 좌표를 저장할 배열
+    let userPathPolyline = L.polyline(userPathCoordinates, {
+      // 경로 색상: 빨간색, 50% 투명도 (명암 50% 표현)
+      // 'rgba(255, 0, 0, 0.5)' -> R, G, B, Alpha(투명도)
+      color: 'rgba(255, 0, 0, 0.7)', 
+      weight: 5 // 경로 선의 굵기
+    }).addTo(map);
 
-    // 현재 위치가 감지될 때 실행
+    let currentLocationMarker = null; // 현재 위치 마커를 저장할 변수
+
     function onLocationFound(e) {
-      const latlng = e.latlng;
-      path.push([latlng.lat, latlng.lng]); // 좌표 저장
+      const latlng = e.latlng; // 현재 위도, 경도 객체
 
-      // 원 반경 5m
-      L.circle(latlng, {
-        color: '#ffffff',
-        fillColor: '#ffffff',
-        fillOpacity: 0.4,
-        radius: 5
-      }).addTo(map);
-
-      // 경로를 선으로 그리기 (2개 이상일 때만)
-      if (path.length > 1) {
-        L.polyline(path, { color: '#00ffcc' }).addTo(map); // 선 색상은 밝게!
+      // 현재 위치 마커 업데이트 또는 생성
+      if (currentLocationMarker) {
+        currentLocationMarker.setLatLng(latlng);
+      } else {
+        currentLocationMarker = L.marker(latlng)
+                                  .addTo(map)
+                                  .bindPopup("현재 위치")
+                                  .openPopup();
       }
+      
+      // 새로운 위치 좌표를 경로 배열에 추가
+      userPathCoordinates.push(latlng);
+      
+      // Polyline(경로 선)을 새 좌표들로 업데이트
+      userPathPolyline.setLatLngs(userPathCoordinates);
 
-      // 현재 위치 마커
-      L.marker(latlng).addTo(map);
+      // 선택 사항: 지도를 계속해서 현재 위치 중심으로 이동시키려면 아래 주석 해제
+      // map.setView(latlng); 
     }
 
     function onLocationError(e) {
       alert("위치 정보를 가져올 수 없습니다: " + e.message);
     }
 
-    map.locate({ setView: true, maxZoom: 16, watch: true });
+    // 위치 추적 시작
+    map.locate({
+        setView: true,       // 첫 위치 확인 시 해당 위치로 지도 중앙 이동
+        maxZoom: 16,         // 최대 확대 레벨
+        watch: true,         // 지속적으로 위치 업데이트 감시
+        enableHighAccuracy: true // 높은 정확도의 위치 정보 요청
+    });
+
+    // 위치 이벤트 리스너 등록
     map.on('locationfound', onLocationFound);
     map.on('locationerror', onLocationError);
   </script>
