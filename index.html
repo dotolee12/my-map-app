@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>나의 대동여지도 - 경로 연결</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([37.5665, 126.9780], 15); // 서울 중심
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap, CartoDB',
+    }).addTo(map);
+
+    // 이동 경로 저장할 배열
+    let path = [];
+
+    // 현재 위치가 감지될 때 실행
+    function onLocationFound(e) {
+      const latlng = e.latlng;
+      path.push([latlng.lat, latlng.lng]); // 좌표 저장
+
+      // 원 반경 5m
+      L.circle(latlng, {
+        color: '#ffffff',
+        fillColor: '#ffffff',
+        fillOpacity: 0.4,
+        radius: 5
+      }).addTo(map);
+
+      // 경로를 선으로 그리기 (2개 이상일 때만)
+      if (path.length > 1) {
+        L.polyline(path, { color: '#00ffcc' }).addTo(map); // 선 색상은 밝게!
+      }
+
+      // 현재 위치 마커
+      L.marker(latlng).addTo(map);
+    }
+
+    function onLocationError(e) {
+      alert("위치 정보를 가져올 수 없습니다: " + e.message);
+    }
+
+    map.locate({ setView: true, maxZoom: 16, watch: true });
+    map.on('locationfound', onLocationFound);
+    map.on('locationerror', onLocationError);
+  </script>
+</body>
+</html>
