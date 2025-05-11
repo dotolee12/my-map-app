@@ -26,14 +26,12 @@
       const latlng = e.latlng;
       const now = new Date().getTime();
 
-      // 현재 위치 마커 업데이트
       if (currentLocationMarker) {
         currentLocationMarker.setLatLng(latlng);
       } else {
         currentLocationMarker = L.marker(latlng).addTo(map);
       }
 
-      // 지나간 위치 점 추가
       const circle = L.circle(latlng, {
         radius: 5,
         fillColor: 'red',
@@ -51,7 +49,6 @@
       alert("위치 정보를 가져올 수 없습니다: " + e.message);
     }
 
-    // 흐려지기 효과: 1분마다 모든 점 opacity 업데이트
     function fadeOldPoints() {
       const now = new Date().getTime();
       visitedPoints.forEach(p => {
@@ -61,18 +58,17 @@
         if (hours < 1) {
           opacity = 1.0;
         } else if (hours < 24) {
-          opacity = 1.0 - ((hours / 24) * 0.8); // 1시간~24시간 사이 점점 흐려짐
+          opacity = 1.0 - ((hours / 24) * 0.8);
         } else {
-          opacity = 0.2; // 24시간 이후 고정
+          opacity = 0.2;
         }
 
         p.circle.setStyle({ fillOpacity: opacity });
       });
     }
 
-    setInterval(fadeOldPoints, 60000); // 1분마다 점 흐려짐
+    setInterval(fadeOldPoints, 60000);
 
-    // 위치 추적 시작
     map.locate({
       setView: true,
       maxZoom: 16,
