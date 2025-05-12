@@ -12,70 +12,89 @@
   <div id="map"></div>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const map = L.map('map').setView([37.5665, 126.9780], 13);
+    const map = L.map('map').setView([37.5665, 126.9780], 13); // 초기 위치: 서울
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      opacity: 0.2,
+      opacity: 0.2, // 배경 타일 투명도
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    let currentLocationMarker = null;
-    const visitedPoints = [];
+    let currentLocationMarker = null; // 현재 위치 마커 변수
+    const visitedPoints = []; // 방문 지점 배열
 
     function onLocationFound(e) {
+      console.log("Location found:", e.latlng); // 위치 찾기 성공 로그
       const latlng = e.latlng;
       const now = new Date().getTime();
 
+      // 현재 위치 마커 업데이트 또는 생성
       if (currentLocationMarker) {
         currentLocationMarker.setLatLng(latlng);
       } else {
-        currentLocationMarker = L.marker(latlng).addTo(map);
+        currentLocationMarker = L.marker(latlng).addTo(map)
+          .bindPopup("여기가 현재 위치예요!").openPopup(); // 마커 생성 및 팝업 추가
       }
 
+      // 경로 표시용 원(Circle) 생성
       const circle = L.circle(latlng, {
-        radius: 5,
-        fillColor: 'red',
-        color: null,
-        fillOpacity: 1.0
+        radius: 5, // 원의 반경 (미터 단위) - 필요시 조절하세요
+        fillColor: 'red', // 채우기 색상
+        color: null,      // 테두리 색상 (null은 없음)
+        fillOpacity: 1.0  // 초기 투명도 (1.0은 불투명)
       }).addTo(map);
 
+      // 방문 지점 배열에 추가
       visitedPoints.push({
         circle: circle,
         timestamp: now
       });
+      console.log("Added point:", latlng, "at", new Date(now).toLocaleTimeString()); // 점 추가 로그 (시간 포함)
     }
 
     function onLocationError(e) {
-      alert("위치 정보를 가져올 수 없습니다: " + e.message);
+      console.error("Location error:", e.message); // 위치 오류 로그 (콘솔에 에러 메시지 출력)
+      alert("위치 정보를 가져올 수 없습니다: " + e.message); // 사용자에게 알림창 표시
     }
 
+    // 오래된 점들의 투명도를 조절하는 함수
     function fadeOldPoints() {
+      // console.log("Fading points..."); // 페이드 함수 실행 로그 (필요시 주석 해제)
       const now = new Date().getTime();
+      const twentyFourHours = 24 * 60 * 60 * 1000; // 24시간 (밀리초)
+      const oneHour = 60 * 60 * 1000; // 1시간 (밀리초)
+
       visitedPoints.forEach(p => {
-        const hours = (now - p.timestamp) / (1000 * 60 * 60);
+        const ageMillis = now - p.timestamp; // 경과 시간 (밀리초)
         let opacity;
 
-        if (hours < 1) {
+        if (ageMillis < oneHour) { // 1시간 미만
           opacity = 1.0;
-        } else if (hours < 24) {
-          opacity = 1.0 - ((hours / 24) * 0.8);
-        } else {
+        } else if (ageMillis < twentyFourHours) { // 1시간 이상 24시간 미만
+          // 1시간일 때 1.0, 24시간일 때 0.2가 되도록 선형적으로 감소
+          opacity = 1.0 - ((ageMillis - oneHour) / (twentyFourHours - oneHour)) * 0.8;
+        } else { // 24시간 이상
           opacity = 0.2;
         }
 
+        // 계산된 투명도로 스타일 업데이트
         p.circle.setStyle({ fillOpacity: opacity });
       });
     }
 
+    // 1분(60000ms)마다 fadeOldPoints 함수 실행
     setInterval(fadeOldPoints, 60000);
 
+    console.log("Requesting location..."); // 위치 요청 시작 로그
+
+    // Leaflet에게 위치 추적 시작 명령
     map.locate({
-      setView: true,
-      maxZoom: 16,
-      watch: true,
-      enableHighAccuracy: true
+      setView: true, // 첫 위치 찾으면 그 위치로 지도 중심 이동
+      maxZoom: 16,   // setView 시 최대 확대 레벨
+      watch: true,   // 지속적으로 위치 감시
+      enableHighAccuracy: true // 높은 정확도 요청
     });
 
+    // 위치 찾기 성공/실패 시 실행될 함수 등록
     map.on('locationfound', onLocationFound);
     map.on('locationerror', onLocationError);
   </script>
