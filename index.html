@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#000000">
-  <link rel="manifest" href="manifest.json">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <title>나의 대동여지도</title>
   <style>
@@ -18,28 +18,58 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
     const map = L.map('map').setView([37.5665, 126.9780], 15);
+
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap, CartoDB',
     }).addTo(map);
 
     let path = [];
 
-    function onLocationFound(e) {
-      const latlng = e.latlng;
-      path.push([latlng.lat, latlng.lng]);
+    function getOpacityByDays(days) {
+      if (days <= 1) return 1.0;
+      if (days <= 10) return 0.8;
+      if (days <= 100) return 0.6;
+      if (days <= 1000) return 0.4;
+      return 0.2;
+    }
 
+    function drawPath() {
+      // 최근 위치만 남기고 이전 경로 재구성
+      for (let i = 1; i < path.length; i++) {
+        const prev = path[i - 1];
+        const curr = path[i];
+        const now = Date.now();
+        const daysAgo = (now - prev.timestamp) / (1000 * 60 * 60 * 24);
+        const opacity = getOpacityByDays(daysAgo);
+
+        const segment = [prev.latlng, curr.latlng];
+
+        L.polyline(segment, {
+          color: '#00ffcc',
+          opacity: opacity,
+          weight: 4
+        }).addTo(map);
+      }
+    }
+
+    function onLocationFound(e) {
+      const latlng = [e.latitude || e.latlng.lat, e.longitude || e.latlng.lng];
+      const timestamp = Date.now();
+      path.push({ latlng, timestamp });
+
+      // 원 표시
       L.circle(latlng, {
         color: '#ffffff',
         fillColor: '#ffffff',
-        fillOpacity: 0.4,
+        fillOpacity: 0.5,
         radius: 5
       }).addTo(map);
 
-      if (path.length > 1) {
-        L.polyline(path, { color: '#00ffcc' }).addTo(map);
-      }
-
+      // 마커 표시 (최근 위치)
       L.marker(latlng).addTo(map);
+
+      // 선 다시 그리기
+      if (path.length > 1) drawPath();
     }
 
     function onLocationError(e) {
@@ -52,6 +82,7 @@
   </script>
 
   <script>
+    // PWA service worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').then(reg => {
