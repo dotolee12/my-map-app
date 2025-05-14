@@ -1,97 +1,100 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <title>나의 대동여지도</title>
-  <style>
-    #map { height: 100vh; margin: 0; padding: 0; }
-    body { margin: 0; font-family: sans-serif; background: #000; }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <title>나의 대동여지도</title>
+    <style>
+        #map { height: 100vh; margin: 0; padding: 0; }
+        body { margin: 0; font-family: sans-serif; background: #000; }
+    </style>
 </head>
 <body>
-  <div id="map"></div>
+    <div id="map"></div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([37.5665, 126.9780], 15);
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([37.5665, 126.9780], 15);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap, CartoDB',
-    }).addTo(map);
-
-    let path = [];
-
-    function getOpacityByDays(days) {
-      if (days <= 1) return 1.0;
-      if (days <= 10) return 0.8;
-      if (days <= 100) return 0.6;
-      if (days <= 1000) return 0.4;
-      return 0.2;
-    }
-
-    function drawPath() {
-      // 최근 위치만 남기고 이전 경로 재구성
-      for (let i = 1; i < path.length; i++) {
-        const prev = path[i - 1];
-        const curr = path[i];
-        const now = Date.now();
-        const daysAgo = (now - prev.timestamp) / (1000 * 60 * 60 * 24);
-        const opacity = getOpacityByDays(daysAgo);
-
-        const segment = [prev.latlng, curr.latlng];
-
-        L.polyline(segment, {
-          color: '#00ffcc',
-          opacity: opacity,
-          weight: 4
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, CartoDB',
         }).addTo(map);
-      }
-    }
 
-    function onLocationFound(e) {
-      const latlng = [e.latitude || e.latlng.lat, e.longitude || e.latlng.lng];
-      const timestamp = Date.now();
-      path.push({ latlng, timestamp });
+        let path = [];
+        let polyline; // Polyline 객체를 저장할 변수
 
-      // 원 표시
-      L.circle(latlng, {
-        color: '#ffffff',
-        fillColor: '#ffffff',
-        fillOpacity: 0.5,
-        radius: 5
-      }).addTo(map);
+        function getOpacityByDays(days) {
+            if (days <= 1) return 1.0;
+            if (days <= 10) return 0.8;
+            if (days <= 100) return 0.6;
+            if (days <= 1000) return 0.4;
+            return 0.2;
+        }
 
-      // 마커 표시 (최근 위치)
-      L.marker(latlng).addTo(map);
+        function drawPath() {
+            // 기존 경로 삭제
+            if (polyline) {
+                map.removeLayer(polyline);
+            }
 
-      // 선 다시 그리기
-      if (path.length > 1) drawPath();
-    }
+            const latlngs = [];
+            const opacities = [];
+            for (let i = 0; i < path.length; i++) {
+                const { latlng, timestamp } = path[i];
+                const now = Date.now();
+                const daysAgo = (now - timestamp) / (1000 * 60 * 60 * 24);
+                const opacity = getOpacityByDays(daysAgo);
+                latlngs.push(latlng);
+                opacities.push(opacity);
+            }
 
-    function onLocationError(e) {
-      alert("위치 정보를 가져올 수 없습니다: " + e.message);
-    }
+            // 경로를 그릴 때, 각 segment의 opacity를 배열로 전달할 수 없으므로,
+            // 전체 경로를 하나의 polyline으로 그리고, 각 점의 opacity를 별도로 관리하지 않습니다.
+            polyline = L.polyline(latlngs, {
+                color: '#00ffcc',
+                opacity: opacities[0] || 1, // 첫 번째 opacity를 사용하거나, 없을 경우 1로 설정
+                weight: 4,
+                lineCap: 'round', // 부드러운 선 끝
+                dashArray: '5, 10' // 점선 스타일 (선택 사항)
+            }).addTo(map);
 
-    map.locate({ setView: true, maxZoom: 16, watch: true });
-    map.on('locationfound', onLocationFound);
-    map.on('locationerror', onLocationError);
-  </script>
+             // 마지막 위치에 마커 추가
+             if (latlngs.length > 0) {
+                L.marker(latlngs[latlngs.length - 1]).addTo(map);
+            }
+        }
 
-  <script>
-    // PWA service worker
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').then(reg => {
-          console.log('Service Worker 등록 성공:', reg);
-        }).catch(err => {
-          console.log('Service Worker 등록 실패:', err);
-        });
-      });
-    }
-  </script>
+        function onLocationFound(e) {
+            const latlng = [e.latitude || e.latlng.lat, e.longitude || e.latlng.lng];
+            const timestamp = Date.now();
+            path.push({ latlng, timestamp });
+
+            drawPath(); // 경로 갱신
+        }
+
+        function onLocationError(e) {
+            alert("위치 정보를 가져올 수 없습니다: " + e.message);
+        }
+
+        map.locate({ setView: true, maxZoom: 16, watch: true });
+        map.on('locationfound', onLocationFound);
+        map.on('locationerror', onLocationError);
+    </script>
+
+    <script>
+        // PWA service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    console.log('Service Worker 등록 성공:', reg);
+                }).catch(err => {
+                    console.log('Service Worker 등록 실패:', err);
+                });
+            });
+        }
+    </script>
 </body>
 </html>
