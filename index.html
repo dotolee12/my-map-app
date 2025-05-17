@@ -26,6 +26,7 @@
         let path = [];
         let polylines = []; // 날짜별 경로를 저장할 배열
         const DAY_IN_MS = 1000 * 60 * 60 * 24;
+        let currentMarker = null; // 현재 위치 마커를 저장할 변수
 
         function getOpacityByDays(days) {
             if (days <= 1) return 1.0;
@@ -79,9 +80,12 @@
                 polylines.push(polyline);
             }
 
-            // 마지막 위치에 마커 추가
+            // 마지막 위치에 마커 표시 (기존 마커 업데이트)
             if (path.length > 0) {
-                L.marker(path[path.length - 1].latlng).addTo(map);
+                if (currentMarker) { // 기존 마커가 있으면
+                    map.removeLayer(currentMarker); // 제거
+                }
+                currentMarker = L.marker(path[path.length - 1].latlng).addTo(map); // 새로 추가
             }
         }
 
