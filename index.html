@@ -1,121 +1,142 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#000000" />
-    <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <title>나의 대동여지도</title>
-    <style>
-        #map { height: 100vh; margin: 0; padding: 0; }
-        body { margin: 0; font-family: sans-serif; background: #000; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <title>나의 대동여지도</title>
+  <style>
+    #map {
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #000;
+    }
+
+    #distance-display {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      color: #00ffcc;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 1000;
+    }
+  </style>
 </head>
 <body>
-    <div id="map"></div>
+  <div id="map"></div>
+  <div id="distance-display">총 거리: 0 km</div>
 
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script>
-        const map = L.map('map').setView([37.5665, 126.9780], 15);
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([37.5665, 126.9780], 15);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap, CartoDB',
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap, CartoDB',
+    }).addTo(map);
+
+    let path = [];
+    let totalDistance = 0;
+
+    function getOpacityByDays(days) {
+      if (days <= 1) return 1.0;
+      if (days <= 10) return 0.8;
+      if (days <= 100) return 0.6;
+      if (days <= 1000) return 0.4;
+      return 0.2;
+    }
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      return R * c;
+    }
+
+    function updateDistanceDisplay() {
+      const display = document.getElementById('distance-display');
+      const km = (totalDistance / 1000).toFixed(2);
+      display.textContent = `총 거리: ${km} km`;
+    }
+
+    function drawPath() {
+      for (let i = 1; i < path.length; i++) {
+        const prev = path[i - 1];
+        const curr = path[i];
+        const now = Date.now();
+        const daysAgo = (now - prev.timestamp) / (1000 * 60 * 60 * 24);
+        const opacity = getOpacityByDays(daysAgo);
+
+        const segment = [prev.latlng, curr.latlng];
+
+        L.polyline(segment, {
+          color: '#00ffcc',
+          opacity: opacity,
+          weight: 4
         }).addTo(map);
+      }
+    }
 
-        let path = [];
-        let polylines = []; // 날짜별 경로를 저장할 배열
-        const DAY_IN_MS = 1000 * 60 * 60 * 24;
-        let currentMarker = null; // 현재 위치 마커를 저장할 변수
+    function onLocationFound(e) {
+      const latlng = [e.latlng.lat, e.latlng.lng];
+      const timestamp = Date.now();
+      path.push({ latlng, timestamp });
 
-        function getOpacityByDays(days) {
-            if (days <= 1) return 1.0;
-            if (days <= 10) return 0.8;
-            if (days <= 100) return 0.6;
-            if (days <= 1000) return 0.4;
-            return 0.2;
-        }
+      L.circle(latlng, {
+        color: '#ffffff',
+        fillColor: '#ffffff',
+        fillOpacity: 0.5,
+        radius: 5
+      }).addTo(map);
 
-        function drawPath() {
-            // 기존 경로 모두 삭제
-            polylines.forEach(polyline => map.removeLayer(polyline));
-            polylines = [];
-            
-            const now = Date.now();
-            let currentPath = [];
-            let prevTimestamp = null;
+      L.marker(latlng).addTo(map);
 
-            for (let i = 0; i < path.length; i++) {
-                const { latlng, timestamp } = path[i];
-                const daysAgo = (now - timestamp) / DAY_IN_MS;
-                const opacity = getOpacityByDays(daysAgo);
+      if (path.length > 1) {
+        const prev = path[path.length - 2].latlng;
+        const curr = path[path.length - 1].latlng;
+        totalDistance += calculateDistance(prev[0], prev[1], curr[0], curr[1]);
+        updateDistanceDisplay();
+        drawPath();
+      }
+    }
 
-                // 날짜가 바뀌면 새로운 경로 시작
-                if (prevTimestamp === null || Math.floor((timestamp - (new Date(timestamp)).setHours(0,0,0,0)) / DAY_IN_MS) !== Math.floor((prevTimestamp - (new Date(prevTimestamp)).setHours(0,0,0,0)) / DAY_IN_MS)) {
-                    if (currentPath.length > 1) {
-                        const polyline = L.polyline(currentPath, {
-                            color: '#00ffcc',
-                            opacity: getOpacityByDays((now - currentPath[0].timestamp) / DAY_IN_MS), // 시작점 기준으로 opacity 계산
-                            weight: 4,
-                            lineCap: 'round',
-                            
-                        }).addTo(map);
-                        polylines.push(polyline);
-                    }
-                    currentPath = [];
-                }
-                
-                currentPath.push({latlng, timestamp});
-                prevTimestamp = timestamp;
-            }
+    function onLocationError(e) {
+      alert("위치 정보를 가져올 수 없습니다: " + e.message);
+    }
 
-            // 마지막 경로 그리기
-            if (currentPath.length > 1) {
-                 const polyline = L.polyline(currentPath, {
-                    color: '#00ffcc',
-                    opacity: getOpacityByDays((now - currentPath[0].timestamp) / DAY_IN_MS),
-                    weight: 4,
-                    lineCap: 'round',
-                }).addTo(map);
-                polylines.push(polyline);
-            }
+    map.locate({ setView: true, maxZoom: 16, watch: true });
+    map.on('locationfound', onLocationFound);
+    map.on('locationerror', onLocationError);
+  </script>
 
-            // 마지막 위치에 마커 표시 (기존 마커 업데이트)
-            if (path.length > 0) {
-                if (currentMarker) { // 기존 마커가 있으면
-                    map.removeLayer(currentMarker); // 제거
-                }
-                currentMarker = L.marker(path[path.length - 1].latlng).addTo(map); // 새로 추가
-            }
-        }
-
-        function onLocationFound(e) {
-            const latlng = [e.latitude || e.latlng.lat, e.longitude || e.latlng.lng];
-            const timestamp = Date.now();
-            path.push({ latlng, timestamp });
-            drawPath();
-        }
-
-        function onLocationError(e) {
-            alert("위치 정보를 가져올 수 없습니다: " + e.message);
-        }
-
-        map.locate({ setView: true, maxZoom: 16, watch: true });
-        map.on('locationfound', onLocationFound);
-        map.on('locationerror', onLocationError);
-    </script>
-
-    <script>
-        // PWA service worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then(reg => {
-                    console.log('Service Worker 등록 성공:', reg);
-                }).catch(err => {
-                    console.log('Service Worker 등록 실패:', err);
-                });
-            });
-        }
-    </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').then(reg => {
+          console.log('Service Worker 등록 성공:', reg);
+        }).catch(err => {
+          console.log('Service Worker 등록 실패:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
