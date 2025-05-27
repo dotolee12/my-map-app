@@ -140,7 +140,7 @@
 
             path.forEach(point => {
                 const date = new Date(point.timestamp);
-                // Format date as YYYY-MM-DD for grouping
+                // Format date as `YYYY-MM-DD` for grouping
                 const dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
                 
                 if (!pathsByDay.has(dateString)) {
@@ -184,7 +184,7 @@
          * @param {Object} e - Event object containing location data.
          */
         function onLocationFound(e) {
-            const latlng = [e.latitude || e.latlng.lat, e.longitude || e.latlng.lng];
+            const latlng = [e.latitude || e.latlng.lat, e.longitude || e.lng]; // Use e.lng for consistency
             const timestamp = Date.now();
             path.push({ latlng, timestamp });
             drawPath(); // Redraw path with new location
