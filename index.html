@@ -1,12 +1,234 @@
-// ... 위 코드 생략 ...
+<!DOCTYPE html>
+<html lang="en"> 
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="manifest" href="manifest.json" /> 
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>My Daedongyeojido</title> 
+    <style>
+        /* Import Inter font for modern UI */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #000; /* Dark background for the map */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden; /* Prevent scrolling on the main page */
+        }
+        #map { 
+            flex-grow: 1; /* Map takes up all available vertical space */
+            width: 100%; /* Map takes full width */
+        }
+        .controls-container {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000; /* Ensure controls are above the map */
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            width: 90%; /* Responsive width for mobile */
+            max-width: 400px; /* Max width for larger screens */
+            padding: 1rem;
+            background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent background */
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+        }
+        .mission-display {
+            background-color: rgba(255, 255, 255, 0.1); /* Light transparent background */
+            color: #e2e8f0; /* Light text color */
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            min-height: 4rem; /* Minimum height for mission text */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 0.9rem;
+            word-break: keep-all; /* Prevent words from breaking */
+        }
+        .loading-spinner { /* This spinner is no longer used for mission generation, but kept if needed elsewhere */
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #00ffcc; /* Teal color for the spinner */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
 
-        // 위치 기반 미션 좌표 (예: 서울 종로구 근처)
+    <div class="controls-container">
+        <button id="generateMissionBtn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+            ✨ Generate Mission
+        </button>
+        <div id="missionStatus" class="text-sm text-gray-400 text-center"></div>
+        <div id="missionOutput" class="mission-display">
+            Your mission will appear here.
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Initialize the Leaflet map
+        const map = L.map('map').setView([37.5665, 126.9780], 15);
+
+        // Add a dark tile layer from CartoDB
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, CartoDB',
+        }).addTo(map);
+
+        let path = []; // Stores historical location data
+        let polylines = []; // Stores Leaflet Polyline objects for drawn paths
+        const DAY_IN_MS = 1000 * 60 * 60 * 24; // Milliseconds in a day
+        let currentMarker = null; // Stores the current location marker
+
+        // Pre-defined virtual location data for demonstration (to bypass Geolocation permission issues in iframes)
+        const now = Date.now();
+        path.push({ latlng: [37.5665, 126.9780], timestamp: now - (0.1 * DAY_IN_MS) }); // Today
+        path.push({ latlng: [37.5651, 126.9789], timestamp: now - (0.05 * DAY_IN_MS) });
+        path.push({ latlng: [37.5630, 126.9750], timestamp: now - (9 * DAY_IN_MS) }); // Within 10 days
+        path.push({ latlng: [37.5580, 126.9700], timestamp: now - (9.5 * DAY_IN_MS) });
+        path.push({ latlng: [37.5700, 126.9800], timestamp: now - (99 * DAY_IN_MS) }); // Within 100 days
+        path.push({ latlng: [37.5710, 126.9760], timestamp: now - (99.5 * DAY_IN_MS) });
+        path.push({ latlng: [37.5750, 126.9850], timestamp: now - (999 * DAY_IN_MS) }); // Within 1000 days
+        path.push({ latlng: [37.5800, 126.9900], timestamp: now - (999.5 * DAY_IN_MS) });
+        path.push({ latlng: [37.5780, 127.0000], timestamp: now - (1001 * DAY_IN_MS) }); // After 1000 days
+        path.push({ latlng: [37.5600, 127.0050], timestamp: now - (1001.5 * DAY_IN_MS) });
+        
+        // Draw the initial path when the app loads
+        drawPath();
+
+        /**
+         * Calculates opacity based on the number of days passed.
+         * @param {number} days - Number of days since the location was recorded.
+         * @returns {number} Opacity value (0.0 to 1.0).
+         */
+        function getOpacityByDays(days) {
+            if (days <= 1) return 1.0;
+            if (days <= 10) return 0.8;
+            if (days <= 100) return 0.6;
+            if (days <= 1000) return 0.4;
+            return 0.2;
+        }
+
+        /**
+         * Draws the path on the map, applying opacity based on the age of the path segments.
+         * Each day's path is drawn as a separate polyline.
+         */
+        function drawPath() {
+            // Remove all existing polylines from the map
+            polylines.forEach(polyline => map.removeLayer(polyline));
+            polylines = [];
+            
+            const now = Date.now();
+            
+            // Group path points by day to apply different opacities
+            const pathsByDay = new Map(); // Map<string (date string), Array<{latlng, timestamp}>>
+
+            path.forEach(point => {
+                const date = new Date(point.timestamp);
+                // Format date as `YYYY-MM-DD` for grouping
+                const dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                
+                if (!pathsByDay.has(dateString)) {
+                    pathsByDay.set(dateString, []);
+                }
+                pathsByDay.get(dateString).push(point);
+            });
+
+            // Iterate through each day's path and draw a polyline with appropriate opacity
+            pathsByDay.forEach((dailyPathPoints, dateString) => {
+                if (dailyPathPoints.length > 1) {
+                    // Sort points by timestamp to ensure correct drawing order
+                    dailyPathPoints.sort((a, b) => a.timestamp - b.timestamp);
+
+                    const firstPointTimestamp = dailyPathPoints[0].timestamp;
+                    const daysAgo = (now - firstPointTimestamp) / DAY_IN_MS;
+                    const opacity = getOpacityByDays(daysAgo);
+
+                    const polyline = L.polyline(dailyPathPoints.map(p => p.latlng), {
+                        color: '#00ffcc', // Teal color for the path
+                        opacity: opacity,
+                        weight: 4,
+                        lineCap: 'round', // Smooth line caps
+                    }).addTo(map);
+                    polylines.push(polyline);
+                }
+            });
+
+            // Update or create the current location marker
+            // This ensures only the *latest* location has a marker, and previous markers are removed.
+            if (path.length > 0) {
+                const latestLatlng = path[path.length - 1].latlng;
+                if (currentMarker) {
+                    // If marker already exists, just update its position
+                    currentMarker.setLatLng(latestLatlng);
+                } else {
+                    // If marker doesn't exist, create it
+                    currentMarker = L.marker(latestLatlng).addTo(map);
+                }
+            } else {
+                // If path is empty and a marker exists, remove it
+                if (currentMarker) {
+                    map.removeLayer(currentMarker);
+                    currentMarker = null;
+                }
+            }
+        }
+
+        /**
+         * Callback function when geolocation successfully finds a location.
+         * @param {Object} e - Event object containing location data.
+         */
+        function onLocationFound(e) {
+            const latlng = [e.latitude || e.latlng.lat, e.longitude || e.lng]; // Use e.lng for consistency
+            const timestamp = Date.now();
+            path.push({ latlng, timestamp });
+            drawPath(); // Redraw path with new location
+            // Check for proximity missions immediately after location update
+            checkProximityMission(latlng[0], latlng[1]);
+        }
+
+        /**
+         * Callback function when geolocation encounters an error.
+         * @param {Object} e - Event object containing error message.
+         */
+        function onLocationError(e) {
+            console.error("Failed to get location information: " + e.message);
+            // In a real app, you might want to show a user-friendly message or fallback.
+        }
+
+        // Start actual geolocation tracking (will only work if permissions are granted and not blocked by policy)
+        map.locate({ setView: true, maxZoom: 16, watch: true });
+        map.on('locationfound', onLocationFound);
+        map.on('locationerror', onLocationError);
+        
+        // --- Location-based Mission Data ---
+        let lastMissionName = null; // Remember the last mission name to prevent immediate repeats
+
+        // Location-based missions (e.g., near Jongno-gu, Seoul)
         const locationMissions = [
             {
                 name: "경복궁",
                 lat: 37.5796,
                 lng: 126.9770,
-                radius: 150, // 미터 단위
+                radius: 150, // meters
                 mission: "경복궁 앞에서 궁궐의 기운을 느껴보세요 👑"
             },
             {
@@ -15,31 +237,114 @@
                 lng: 126.9396,
                 radius: 200,
                 mission: "한강변을 따라 산책하며 강바람을 느껴보세요 🌊"
+            },
+            {
+                name: "남산타워",
+                lat: 37.5512,
+                lng: 126.9882,
+                radius: 100,
+                mission: "남산타워에 올라 서울의 전경을 감상하세요 🗼"
             }
         ];
 
+        // Random mission list (used if no proximity mission is found)
+        const missions = [
+            "숨겨진 골목길을 탐험하고 특별한 벽화를 찾아보세요!",
+            "근처 카페에서 독특한 음료를 맛보고 기록해 보세요!",
+            "지역 시장을 방문하여 새로운 식재료를 발견해 보세요!",
+            "가장 오래된 나무를 찾아 사진을 찍고 그 역사를 상상해 보세요!",
+            "지나가는 사람들에게 미소를 지어주고 긍정적인 에너지를 나눠주세요!"
+        ];
+
+        /**
+         * Calculates the distance between two geographical points using the Haversine formula.
+         * @param {number} lat1 - Latitude of point 1.
+         * @param {number} lon1 - Longitude of point 1.
+         * @param {number} lat2 - Latitude of point 2.
+         * @param {number} lon2 - Longitude of point 2.
+         * @returns {number} Distance in meters.
+         */
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // metres
+            const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            const d = R * c; // in metres
+            return d;
+        }
+
+        /**
+         * Checks if the current location is within proximity of any defined mission spots.
+         * @param {number} currentLat - Current latitude.
+         * @param {number} currentLng - Current longitude.
+         * @returns {boolean} True if a proximity mission was found and displayed, false otherwise.
+         */
         function checkProximityMission(currentLat, currentLng) {
             for (const spot of locationMissions) {
                 const dist = calculateDistance(currentLat, currentLng, spot.lat, spot.lng);
-                if (dist <= spot.radius) {
+                // Display mission only if within radius AND it's not the same as the last displayed mission
+                if (dist <= spot.radius && lastMissionName !== spot.name) {
                     missionOutput.textContent = spot.mission;
-                    document.getElementById('missionStatus').textContent = `${spot.name} 미션`; 
+                    document.getElementById('missionStatus').textContent = `${spot.name} 미션`;
+                    lastMissionName = spot.name; // Update last mission name
                     return true;
                 }
             }
             return false;
         }
 
+        // --- Mission Generation Logic (without Gemini API) ---
+        const generateMissionBtn = document.getElementById('generateMissionBtn');
+        const missionOutput = document.getElementById('missionOutput');
+        const missionStatus = document.getElementById('missionStatus');
+
         generateMissionBtn.addEventListener('click', () => {
+            missionOutput.innerHTML = '미션 생성 중...'; // Simple loading message
+            missionStatus.textContent = ''; // Clear status
+
             const latest = path[path.length - 1];
-            if (!latest) return;
+            if (!latest) {
+                missionOutput.textContent = "위치 정보가 없습니다. 지도를 움직여 위치를 추가하거나 잠시 기다려 주세요.";
+                missionStatus.textContent = '오류';
+                return;
+            }
             const [currLat, currLng] = latest.latlng;
 
+            // 1. Check for proximity missions
             const locationMatched = checkProximityMission(currLat, currLng);
-            if (!locationMatched) {
-                const randomIndex = Math.floor(Math.random() * missions.length);
-                const selected = missions[randomIndex];
-                missionOutput.textContent = selected;
-                document.getElementById('missionStatus').textContent = '랜덤 미션';
+            
+            if (locationMatched) {
+                // If a proximity mission is found, it's already displayed by checkProximityMission
+                return; 
             }
+
+            // 2. If no proximity mission, display a random mission
+            const randomIndex = Math.floor(Math.random() * missions.length);
+            missionOutput.textContent = missions[randomIndex];
+            missionStatus.textContent = '랜덤 미션';
+            lastMissionName = 'RANDOM'; // Update last mission name for random missions
         });
+
+    </script>
+
+    <script>
+        // PWA service worker registration (manifest.json and sw.js files are required for this to work)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    console.log('Service Worker registered successfully:', reg);
+                }).catch(err => {
+                    console.log('Service Worker registration failed:', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
