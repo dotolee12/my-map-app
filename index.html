@@ -1,146 +1,263 @@
 <!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <title>나의 대동여지도</title>
-  <style>
-    #map {
-      height: 100vh;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background: #000;
-    }
-
-    #distance-display {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.6);
-      color: #00ffcc;
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      z-index: 1000;
-    }
-  </style>
+<html lang="en"> <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="manifest" href="manifest.json" /> 
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>My Daedongyeojido</title> <style>
+        /* Import Inter font for modern UI */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #000; /* Dark background for the map */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden; /* Prevent scrolling on the main page */
+        }
+        #map { 
+            flex-grow: 1; /* Map takes up all available vertical space */
+            width: 100%; /* Map takes full width */
+        }
+        .controls-container {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000; /* Ensure controls are above the map */
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            width: 90%; /* Responsive width for mobile */
+            max-width: 400px; /* Max width for larger screens */
+            padding: 1rem;
+            background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent background */
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+        }
+        .mission-display {
+            background-color: rgba(255, 255, 255, 0.1); /* Light transparent background */
+            color: #e2e8f0; /* Light text color */
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            min-height: 4rem; /* Minimum height for mission text */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 0.9rem;
+            word-break: keep-all; /* Prevent words from breaking */
+        }
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #00ffcc; /* Teal color for the spinner */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-  <div id="map"></div>
-  <div id="distance-display">총 거리: 0 km</div>
+    <div id="map"></div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').setView([37.5665, 126.9780], 15);
+    <div class="controls-container">
+        <button id="generateMissionBtn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+            ✨ Generate Mission
+        </button>
+        <div id="missionOutput" class="mission-display">
+            Your mission will appear here.
+        </div>
+    </div>
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap, CartoDB',
-    }).addTo(map);
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Initialize the Leaflet map
+        const map = L.map('map').setView([37.5665, 126.9780], 15);
 
-    let path = [];
-    let totalDistance = 0;
-    let currentMarker = null;
-
-    function getOpacityByDays(days) {
-      if (days <= 1) return 1.0;
-      if (days <= 10) return 0.8;
-      if (days <= 100) return 0.6;
-      if (days <= 1000) return 0.4;
-      return 0.2;
-    }
-
-    function calculateDistance(lat1, lon1, lat2, lon2) {
-      const R = 6371e3;
-      const φ1 = lat1 * Math.PI / 180;
-      const φ2 = lat2 * Math.PI / 180;
-      const Δφ = (lat2 - lat1) * Math.PI / 180;
-      const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-      return R * c;
-    }
-
-    function updateDistanceDisplay() {
-      const display = document.getElementById('distance-display');
-      const km = (totalDistance / 1000).toFixed(2);
-      display.textContent = `총 거리: ${km} km`;
-    }
-
-    function drawPath() {
-      for (let i = 1; i < path.length; i++) {
-        const prev = path[i - 1];
-        const curr = path[i];
-        const now = Date.now();
-        const daysAgo = (now - prev.timestamp) / (1000 * 60 * 60 * 24);
-        const opacity = getOpacityByDays(daysAgo);
-
-        const segment = [prev.latlng, curr.latlng];
-
-        L.polyline(segment, {
-          color: '#00ffcc',
-          opacity: opacity,
-          weight: 4
+        // Add a dark tile layer from CartoDB
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap, CartoDB',
         }).addTo(map);
-      }
-    }
 
-    function onLocationFound(e) {
-      const latlng = [e.latlng.lat, e.latlng.lng];
-      const timestamp = Date.now();
-      path.push({ latlng, timestamp });
+        let path = []; // Stores historical location data
+        let polylines = []; // Stores Leaflet Polyline objects for drawn paths
+        const DAY_IN_MS = 1000 * 60 * 60 * 24; // Milliseconds in a day
+        let currentMarker = null; // Stores the current location marker
 
-      L.circle(latlng, {
-        color: '#ffffff',
-        fillColor: '#ffffff',
-        fillOpacity: 0.5,
-        radius: 5
-      }).addTo(map);
-
-      if (currentMarker) {
-        map.removeLayer(currentMarker);
-      }
-      currentMarker = L.marker(latlng).addTo(map);
-
-      if (path.length > 1) {
-        const prev = path[path.length - 2].latlng;
-        const curr = path[path.length - 1].latlng;
-        totalDistance += calculateDistance(prev[0], prev[1], curr[0], curr[1]);
-        updateDistanceDisplay();
+        // Pre-defined virtual location data for demonstration (to bypass Geolocation permission issues in iframes)
+        const now = Date.now();
+        path.push({ latlng: [37.5665, 126.9780], timestamp: now - (0.1 * DAY_IN_MS) }); // Today
+        path.push({ latlng: [37.5651, 126.9789], timestamp: now - (0.05 * DAY_IN_MS) });
+        path.push({ latlng: [37.5630, 126.9750], timestamp: now - (9 * DAY_IN_MS) }); // Within 10 days
+        path.push({ latlng: [37.5580, 126.9700], timestamp: now - (9.5 * DAY_IN_MS) });
+        path.push({ latlng: [37.5700, 126.9800], timestamp: now - (99 * DAY_IN_MS) }); // Within 100 days
+        path.push({ latlng: [37.5710, 126.9760], timestamp: now - (99.5 * DAY_IN_MS) });
+        path.push({ latlng: [37.5750, 126.9850], timestamp: now - (999 * DAY_IN_MS) }); // Within 1000 days
+        path.push({ latlng: [37.5800, 126.9900], timestamp: now - (999.5 * DAY_IN_MS) });
+        path.push({ latlng: [37.5780, 127.0000], timestamp: now - (1001 * DAY_IN_MS) }); // After 1000 days
+        path.push({ latlng: [37.5600, 127.0050], timestamp: now - (1001.5 * DAY_IN_MS) });
+        
+        // Draw the initial path when the app loads
         drawPath();
-      }
-    }
 
-    function onLocationError(e) {
-      alert("위치 정보를 가지오지 못했습니다: " + e.message);
-    }
+        /**
+         * Calculates opacity based on the number of days passed.
+         * @param {number} days - Number of days since the location was recorded.
+         * @returns {number} Opacity value (0.0 to 1.0).
+         */
+        function getOpacityByDays(days) {
+            if (days <= 1) return 1.0;
+            if (days <= 10) return 0.8;
+            if (days <= 100) return 0.6;
+            if (days <= 1000) return 0.4;
+            return 0.2;
+        }
 
-    map.locate({ setView: true, maxZoom: 16, watch: true });
-    map.on('locationfound', onLocationFound);
-    map.on('locationerror', onLocationError);
-  </script>
+        /**
+         * Draws the path on the map, applying opacity based on the age of the path segments.
+         * Each day's path is drawn as a separate polyline.
+         */
+        function drawPath() {
+            // Remove all existing polylines from the map
+            polylines.forEach(polyline => map.removeLayer(polyline));
+            polylines = [];
+            
+            const now = Date.now();
+            
+            // Group path points by day to apply different opacities
+            const pathsByDay = new Map(); // Map<string (date string), Array<{latlng, timestamp}>>
 
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').then(reg => {
-          console.log('Service Worker 등록 성공:', reg);
-        }).catch(err => {
-          console.log('Service Worker 등록 실패:', err);
+            path.forEach(point => {
+                const date = new Date(point.timestamp);
+                // Format date as YYYY-MM-DD for grouping
+                const dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                
+                if (!pathsByDay.has(dateString)) {
+                    pathsByDay.set(dateString, []);
+                }
+                pathsByDay.get(dateString).push(point);
+            });
+
+            // Iterate through each day's path and draw a polyline with appropriate opacity
+            pathsByDay.forEach((dailyPathPoints, dateString) => {
+                if (dailyPathPoints.length > 1) {
+                    // Sort points by timestamp to ensure correct drawing order
+                    dailyPathPoints.sort((a, b) => a.timestamp - b.timestamp);
+
+                    const firstPointTimestamp = dailyPathPoints[0].timestamp;
+                    const daysAgo = (now - firstPointTimestamp) / DAY_IN_MS;
+                    const opacity = getOpacityByDays(daysAgo);
+
+                    const polyline = L.polyline(dailyPathPoints.map(p => p.latlng), {
+                        color: '#00ffcc', // Teal color for the path
+                        opacity: opacity,
+                        weight: 4,
+                        lineCap: 'round', // Smooth line caps
+                    }).addTo(map);
+                    polylines.push(polyline);
+                }
+            });
+
+            // Update or create the current location marker
+            if (path.length > 0) {
+                if (currentMarker) { 
+                    map.removeLayer(currentMarker); // Remove existing marker
+                }
+                currentMarker = L.marker(path[path.length - 1].latlng).addTo(map); // Add new marker at the latest position
+            }
+        }
+
+        /**
+         * Callback function when geolocation successfully finds a location.
+         * @param {Object} e - Event object containing location data.
+         */
+        function onLocationFound(e) {
+            const latlng = [e.latitude || e.latlng.lat, e.longitude || e.latlng.lng];
+            const timestamp = Date.now();
+            path.push({ latlng, timestamp });
+            drawPath(); // Redraw path with new location
+        }
+
+        /**
+         * Callback function when geolocation encounters an error.
+         * @param {Object} e - Event object containing error message.
+         */
+        function onLocationError(e) {
+            console.error("Failed to get location information: " + e.message);
+            // In a real app, you might want to show a user-friendly message or fallback.
+        }
+
+        // Start actual geolocation tracking (will only work if permissions are granted and not blocked by policy)
+        map.locate({ setView: true, maxZoom: 16, watch: true });
+        map.on('locationfound', onLocationFound);
+        map.on('locationerror', onLocationError);
+        
+        // --- Gemini API Integration for Mission Generation ---
+        const generateMissionBtn = document.getElementById('generateMissionBtn');
+        const missionOutput = document.getElementById('missionOutput');
+
+        generateMissionBtn.addEventListener('click', async () => {
+            missionOutput.innerHTML = '<div class="loading-spinner"></div>'; // Show loading spinner
+
+            // Generate a prompt based on the current map center
+            const currentMapCenter = map.getCenter();
+            const locationDescription = `near the map center (Latitude: ${currentMapCenter.lat.toFixed(4)}, Longitude: ${currentMapCenter.lng.toFixed(4)})`; 
+            
+            const prompt = `For a "My Daedongyeojido" game player, generate a short and exciting adventure mission to perform in "${locationDescription}". The mission should involve exploring the area and finding something unique. Write it like a quest for a map-based game.`;
+
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // API key is automatically provided by the Canvas environment.
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    missionOutput.textContent = text; // Display the generated mission
+                } else {
+                    missionOutput.textContent = "Failed to generate mission. Please try again.";
+                    console.error('Gemini API response structure unexpected:', result);
+                }
+            } catch (error) {
+                missionOutput.textContent = "Error generating mission. Please check your network connection.";
+                console.error('Error calling Gemini API:', error);
+            }
         });
-      });
-    }
-  </script>
+
+    </script>
+
+    <script>
+        // PWA service worker registration (manifest.json and sw.js files are required for this to work)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    console.log('Service Worker registered successfully:', reg);
+                }).catch(err => {
+                    console.log('Service Worker registration failed:', err);
+                });
+            });
+        }
+    </script>
 </body>
 </html>
