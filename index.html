@@ -170,6 +170,7 @@
             });
 
             // Update or create the current location marker
+            // This ensures only the *latest* location has a marker, and previous markers are removed.
             if (path.length > 0) {
                 if (currentMarker) { 
                     map.removeLayer(currentMarker); // Remove existing marker
