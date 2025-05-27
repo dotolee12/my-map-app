@@ -1,240 +1,45 @@
-<!DOCTYPE html>
-<html lang="en"> <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#000000" />
-    <link rel="manifest" href="manifest.json" /> 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <title>My Daedongyeojido</title> 
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            margin: 0;
-            padding: 0;
-            background: #000;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-        #map { 
-            flex-grow: 1;
-            width: 100%;
-        }
-        .controls-container {
-            position: absolute;
-            bottom: 5rem;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            width: 90%;
-            max-width: 400px;
-            padding: 1rem;
-            background-color: rgba(0, 0, 0, 0.7);
-            border-radius: 0.75rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        .mission-display {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: #e2e8f0;
-            padding: 0.75rem;
-            border-radius: 0.5rem;
-            min-height: 4rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            font-size: 0.9rem;
-            word-break: keep-all;
-        }
-        .loading-spinner {
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top: 3px solid #00ffcc;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-</head>
-<body>
-    <div id="map"></div>
+// ... 위 코드 생략 ...
 
-    <div class="controls-container">
-        <button id="generateMissionBtn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
-            ✨ Generate Mission
-        </button>
-        <div id="missionOutput" class="mission-display">
-            Your mission will appear here.
-        </div>
-    </div>
-
-    <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white text-sm p-3 flex justify-between z-[1000]">
-      <div>📏 오늘 거리: <span id="todayDistance">0.00</span> km</div>
-      <div>🏃‍♂️ 속도: <span id="currentSpeed">0.0</span> km/h</div>
-      <div>🎯 미션: <span id="missionStatus">없음</span></div>
-    </div>
-
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script>
-        const map = L.map('map').setView([37.5665, 126.9780], 15);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap, CartoDB',
-        }).addTo(map);
-
-        let path = [];
-        let polylines = [];
-        const DAY_IN_MS = 1000 * 60 * 60 * 24;
-        let currentMarker = null;
-        let totalDistanceToday = 0;
-        let lastTimestamp = null;
-
-        function getOpacityByDays(days) {
-            if (days <= 1) return 1.0;
-            if (days <= 10) return 0.8;
-            if (days <= 100) return 0.6;
-            if (days <= 1000) return 0.4;
-            return 0.2;
-        }
-
-        function drawPath() {
-            polylines.forEach(polyline => map.removeLayer(polyline));
-            polylines = [];
-
-            const now = Date.now();
-            const pathsByDay = new Map();
-
-            path.forEach(point => {
-                const date = new Date(point.timestamp);
-                const dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
-                if (!pathsByDay.has(dateString)) pathsByDay.set(dateString, []);
-                pathsByDay.get(dateString).push(point);
-            });
-
-            pathsByDay.forEach((dailyPathPoints) => {
-                if (dailyPathPoints.length > 1) {
-                    dailyPathPoints.sort((a, b) => a.timestamp - b.timestamp);
-                    const firstPointTimestamp = dailyPathPoints[0].timestamp;
-                    const daysAgo = (now - firstPointTimestamp) / DAY_IN_MS;
-                    const opacity = getOpacityByDays(daysAgo);
-
-                    const polyline = L.polyline(dailyPathPoints.map(p => p.latlng), {
-                        color: '#00ffcc',
-                        opacity: opacity,
-                        weight: 4,
-                        lineCap: 'round',
-                    }).addTo(map);
-                    polylines.push(polyline);
-                }
-            });
-
-            if (path.length > 0) {
-                if (currentMarker) map.removeLayer(currentMarker);
-                currentMarker = L.marker(path[path.length - 1].latlng).addTo(map);
+        // 위치 기반 미션 좌표 (예: 서울 종로구 근처)
+        const locationMissions = [
+            {
+                name: "경복궁",
+                lat: 37.5796,
+                lng: 126.9770,
+                radius: 150, // 미터 단위
+                mission: "경복궁 앞에서 궁궐의 기운을 느껴보세요 👑"
+            },
+            {
+                name: "한강 공원",
+                lat: 37.5207,
+                lng: 126.9396,
+                radius: 200,
+                mission: "한강변을 따라 산책하며 강바람을 느껴보세요 🌊"
             }
-        }
+        ];
 
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3;
-            const φ1 = lat1 * Math.PI / 180;
-            const φ2 = lat2 * Math.PI / 180;
-            const Δφ = (lat2 - lat1) * Math.PI / 180;
-            const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-            return R * c;
-        }
-
-        function onLocationFound(e) {
-            const latlng = [e.latitude || e.latlng.lat, e.longitude || e.lng];
-            const timestamp = Date.now();
-
-            if (path.length > 0) {
-                const prev = path[path.length - 1].latlng;
-                const dist = calculateDistance(prev[0], prev[1], latlng[0], latlng[1]);
-                totalDistanceToday += dist;
-                document.getElementById("todayDistance").textContent = (totalDistanceToday / 1000).toFixed(2);
-
-                const timeDiff = (timestamp - lastTimestamp) / 1000; // seconds
-                const speed = timeDiff > 0 ? (dist / timeDiff) * 3.6 : 0; // km/h
-                document.getElementById("currentSpeed").textContent = speed.toFixed(1);
-            }
-
-            path.push({ latlng, timestamp });
-            lastTimestamp = timestamp;
-            drawPath();
-        }
-
-        function onLocationError(e) {
-            console.error("Failed to get location information: " + e.message);
-        }
-
-        map.locate({ setView: true, maxZoom: 16, watch: true });
-        map.on('locationfound', onLocationFound);
-        map.on('locationerror', onLocationError);
-
-        const generateMissionBtn = document.getElementById('generateMissionBtn');
-        const missionOutput = document.getElementById('missionOutput');
-
-        generateMissionBtn.addEventListener('click', async () => {
-            missionOutput.innerHTML = '<div class="loading-spinner"></div>';
-            document.getElementById('missionStatus').textContent = '생성 중...';
-
-            const currentMapCenter = map.getCenter();
-            const locationDescription = `near the map center (Latitude: ${currentMapCenter.lat.toFixed(4)}, Longitude: ${currentMapCenter.lng.toFixed(4)})`;
-
-            const prompt = `For a \"My Daedongyeojido\" game player, generate a short and exciting adventure mission to perform in \"${locationDescription}\".`;
-            const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
-            const payload = { contents: chatHistory };
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-
-                if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                    const text = result.candidates[0].content.parts[0].text;
-                    missionOutput.textContent = text;
-                    document.getElementById('missionStatus').textContent = '진행 중';
-                } else {
-                    missionOutput.textContent = "Failed to generate mission.";
-                    document.getElementById('missionStatus').textContent = '없음';
+        function checkProximityMission(currentLat, currentLng) {
+            for (const spot of locationMissions) {
+                const dist = calculateDistance(currentLat, currentLng, spot.lat, spot.lng);
+                if (dist <= spot.radius) {
+                    missionOutput.textContent = spot.mission;
+                    document.getElementById('missionStatus').textContent = `${spot.name} 미션`; 
+                    return true;
                 }
-            } catch (error) {
-                missionOutput.textContent = "Error generating mission.";
-                document.getElementById('missionStatus').textContent = '에러';
+            }
+            return false;
+        }
+
+        generateMissionBtn.addEventListener('click', () => {
+            const latest = path[path.length - 1];
+            if (!latest) return;
+            const [currLat, currLng] = latest.latlng;
+
+            const locationMatched = checkProximityMission(currLat, currLng);
+            if (!locationMatched) {
+                const randomIndex = Math.floor(Math.random() * missions.length);
+                const selected = missions[randomIndex];
+                missionOutput.textContent = selected;
+                document.getElementById('missionStatus').textContent = '랜덤 미션';
             }
         });
-    </script>
-
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then(reg => {
-                    console.log('Service Worker registered successfully:', reg);
-                }).catch(err => {
-                    console.log('Service Worker registration failed:', err);
-                });
-            });
-        }
-    </script>
-</body>
-</html>
-
