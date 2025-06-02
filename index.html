@@ -16,11 +16,7 @@
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const map = L.map('map').setView([37.5665, 126.9780], 15);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap, CartoDB',
-    }).addTo(map);
-
+    let map;
     let path = [];
     let polylines = [];
     let currentMarker = null;
@@ -35,7 +31,6 @@
       let opacity = 1.0 - (minutesPassed * 0.01);
       if (opacity < 0.3) {
         opacity = 0.3; // 최저값 고정
-        // 색상 설정
         if (daysPassed === 0) {
           return { color: '#aaaaaa', opacity: opacity }; // 오늘
         } else if (daysPassed === 1) {
@@ -49,13 +44,13 @@
     }
 
     function drawPath() {
-      // 기존 선 삭제
       polylines.forEach(p => map.removeLayer(p));
       polylines = [];
 
       for (let i = 1; i < path.length; i++) {
         const prev = path[i - 1];
         const curr = path[i];
+        if (!curr.timestamp) continue;
         const segmentStyle = getOpacityAndColorByMinutes(curr.timestamp);
 
         const segment = L.polyline([prev.latlng, curr.latlng], {
@@ -100,6 +95,7 @@
         fillOpacity: 1
       }).addTo(map);
 
+      map.setView(latlng, 15);
       drawPath();
       savePathToLocalStorage();
     }
@@ -108,12 +104,19 @@
       alert("위치 정보를 가져올 수 없습니다: " + e.message);
     }
 
-    // 페이지 로드 시 저장된 경로 불러오기
-    window.addEventListener('load', loadPathFromLocalStorage);
+    // 페이지 로드 시 경로 데이터 먼저 불러오고, 그다음 지도 초기화 및 GPS 추적 시작
+    window.addEventListener('load', () => {
+      map = L.map('map').setView([37.5665, 126.9780], 15);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap, CartoDB',
+      }).addTo(map);
 
-    map.locate({ setView: true, maxZoom: 16, watch: true });
-    map.on('locationfound', onLocationFound);
-    map.on('locationerror', onLocationError);
+      loadPathFromLocalStorage(); // 🚨 데이터 먼저 불러오기
+
+      map.locate({ setView: true, maxZoom: 16, watch: true });
+      map.on('locationfound', onLocationFound);
+      map.on('locationerror', onLocationError);
+    });
   </script>
 
   <script>
@@ -130,3 +133,4 @@
   </script>
 </body>
 </html>
+
