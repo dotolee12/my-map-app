@@ -24,14 +24,28 @@
     let path = [];
     let polylines = [];
     let currentMarker = null;
-    const DAY_IN_MS = 1000 * 60 * 60 * 24;
 
-    function getOpacityByDays(days) {
-      if (days <= 1) return 1.0;
-      if (days <= 10) return 0.8;
-      if (days <= 100) return 0.6;
-      if (days <= 1000) return 0.4;
-      return 0.2;
+    // 📌 분 단위로 투명도를 줄이고 날짜에 따라 색상 바꾸는 함수
+    function getOpacityAndColorByMinutes(timestamp) {
+      const now = new Date();
+      const past = new Date(timestamp);
+      const minutesPassed = Math.floor((now - past) / (1000 * 60)); // 분 단위
+      const daysPassed = Math.floor((now - past) / (1000 * 60 * 60 * 24)); // 일 단위
+
+      let opacity = 1.0 - (minutesPassed * 0.01);
+      if (opacity < 0.3) {
+        opacity = 0.3; // 최저값 고정
+        // 색상 설정
+        if (daysPassed === 0) {
+          return { color: '#aaaaaa', opacity: opacity }; // 오늘
+        } else if (daysPassed === 1) {
+          return { color: '#555555', opacity: opacity }; // 어제
+        } else {
+          return { color: '#000000', opacity: opacity }; // 2일 전 이상
+        }
+      }
+
+      return { color: '#00ffcc', opacity: opacity }; // 기본 경로 색상
     }
 
     function drawPath() {
@@ -39,22 +53,34 @@
       polylines.forEach(p => map.removeLayer(p));
       polylines = [];
 
-      const now = Date.now();
-      let latlngs = [];
-
       for (let i = 1; i < path.length; i++) {
         const prev = path[i - 1];
         const curr = path[i];
-        const daysAgo = (now - curr.timestamp) / DAY_IN_MS;
-        const opacity = getOpacityByDays(daysAgo);
+        const segmentStyle = getOpacityAndColorByMinutes(curr.timestamp);
 
         const segment = L.polyline([prev.latlng, curr.latlng], {
-          color: '#00ffcc',
-          opacity: opacity,
+          color: segmentStyle.color,
+          opacity: segmentStyle.opacity,
           weight: 4,
           lineCap: 'round',
         }).addTo(map);
         polylines.push(segment);
+      }
+    }
+
+    function savePathToLocalStorage() {
+      localStorage.setItem('pathData', JSON.stringify(path));
+    }
+
+    function loadPathFromLocalStorage() {
+      const data = localStorage.getItem('pathData');
+      if (data) {
+        try {
+          path = JSON.parse(data);
+          drawPath();
+        } catch (e) {
+          console.error('저장된 경로를 불러오는데 실패했습니다.', e);
+        }
       }
     }
 
@@ -75,11 +101,15 @@
       }).addTo(map);
 
       drawPath();
+      savePathToLocalStorage();
     }
 
     function onLocationError(e) {
       alert("위치 정보를 가져올 수 없습니다: " + e.message);
     }
+
+    // 페이지 로드 시 저장된 경로 불러오기
+    window.addEventListener('load', loadPathFromLocalStorage);
 
     map.locate({ setView: true, maxZoom: 16, watch: true });
     map.on('locationfound', onLocationFound);
