@@ -116,6 +116,11 @@
       map.locate({ setView: true, maxZoom: 16, watch: true });
       map.on('locationfound', onLocationFound);
       map.on('locationerror', onLocationError);
+
+      // 🔥 추가: 1분마다 drawPath() 호출하여 명암 업데이트
+      setInterval(() => {
+        drawPath();
+      }, 60000); // 60000ms = 1분
     });
   </script>
 
@@ -133,4 +138,3 @@
   </script>
 </body>
 </html>
-
