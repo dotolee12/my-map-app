@@ -9,10 +9,31 @@
   <style>
     #map { height: 100vh; margin: 0; padding: 0; }
     body { margin: 0; font-family: sans-serif; background: #000; }
+    #buttonContainer {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+    }
+    button {
+      padding: 8px 16px;
+      margin: 4px;
+      background: #444;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #666;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div id="buttonContainer">
+    <button onclick="insertTestData()">테스트 경로 추가</button>
+  </div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
@@ -21,26 +42,24 @@
     let polylines = [];
     let currentMarker = null;
 
-    // 📌 분 단위로 투명도를 줄이고 날짜에 따라 색상 바꾸는 함수
     function getOpacityAndColorByMinutes(timestamp) {
       const now = new Date();
       const past = new Date(timestamp);
-      const minutesPassed = Math.floor((now - past) / (1000 * 60)); // 분 단위
-      const daysPassed = Math.floor((now - past) / (1000 * 60 * 60 * 24)); // 일 단위
+      const minutesPassed = Math.floor((now - past) / (1000 * 60));
+      const daysPassed = Math.floor((now - past) / (1000 * 60 * 60 * 24));
 
       let opacity = 1.0 - (minutesPassed * 0.01);
       if (opacity < 0.3) {
-        opacity = 0.3; // 최저값 고정
+        opacity = 0.3;
         if (daysPassed === 0) {
-          return { color: '#aaaaaa', opacity: opacity }; // 오늘
+          return { color: '#aaaaaa', opacity: opacity };
         } else if (daysPassed === 1) {
-          return { color: '#555555', opacity: opacity }; // 어제
+          return { color: '#555555', opacity: opacity };
         } else {
-          return { color: '#000000', opacity: opacity }; // 2일 전 이상
+          return { color: '#000000', opacity: opacity };
         }
       }
-
-      return { color: '#00ffcc', opacity: opacity }; // 기본 경로 색상
+      return { color: '#00ffcc', opacity: opacity };
     }
 
     function drawPath() {
@@ -51,11 +70,11 @@
         const prev = path[i - 1];
         const curr = path[i];
         if (!curr.timestamp) continue;
-        const segmentStyle = getOpacityAndColorByMinutes(curr.timestamp);
+        const style = getOpacityAndColorByMinutes(curr.timestamp);
 
         const segment = L.polyline([prev.latlng, curr.latlng], {
-          color: segmentStyle.color,
-          opacity: segmentStyle.opacity,
+          color: style.color,
+          opacity: style.opacity,
           weight: 4,
           lineCap: 'round',
         }).addTo(map);
@@ -63,78 +82,23 @@
       }
     }
 
-    function savePathToLocalStorage() {
-      localStorage.setItem('pathData', JSON.stringify(path));
-    }
-
-    function loadPathFromLocalStorage() {
-      const data = localStorage.getItem('pathData');
-      if (data) {
-        try {
-          path = JSON.parse(data);
-          drawPath();
-        } catch (e) {
-          console.error('저장된 경로를 불러오는데 실패했습니다.', e);
-        }
-      }
-    }
-
-    function onLocationFound(e) {
-      const latlng = [e.latitude || e.latlng.lat, e.longitude || e.latlng.lng];
-      const timestamp = Date.now();
-      path.push({ latlng, timestamp });
-
-      // 현재 위치 마커 새로고침
-      if (currentMarker) {
-        map.removeLayer(currentMarker);
-      }
-      currentMarker = L.circleMarker(latlng, {
-        radius: 6,
-        color: 'lime',
-        fillColor: 'lime',
-        fillOpacity: 1
-      }).addTo(map);
-
-      map.setView(latlng, 15);
+    function insertTestData() {
+      const now = Date.now();
+      path = [
+        { latlng: [37.5665, 126.9780], timestamp: now - (60 * 60 * 1000) }, // 1시간 전
+        { latlng: [37.5670, 126.9785], timestamp: now - (30 * 60 * 1000) }, // 30분 전
+        { latlng: [37.5680, 126.9790], timestamp: now }, // 지금
+      ];
       drawPath();
-      savePathToLocalStorage();
     }
 
-    function onLocationError(e) {
-      alert("위치 정보를 가져올 수 없습니다: " + e.message);
-    }
-
-    // 페이지 로드 시 경로 데이터 먼저 불러오고, 그다음 지도 초기화 및 GPS 추적 시작
     window.addEventListener('load', () => {
       map = L.map('map').setView([37.5665, 126.9780], 15);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap, CartoDB',
       }).addTo(map);
-
-      loadPathFromLocalStorage(); // 🚨 데이터 먼저 불러오기
-
-      map.locate({ setView: true, maxZoom: 16, watch: true });
-      map.on('locationfound', onLocationFound);
-      map.on('locationerror', onLocationError);
-
-      // 🔥 추가: 1분마다 drawPath() 호출하여 명암 업데이트
-      setInterval(() => {
-        drawPath();
-      }, 60000); // 60000ms = 1분
     });
-  </script>
-
-  <script>
-    // PWA service worker 등록
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').then(reg => {
-          console.log('Service Worker 등록 성공:', reg);
-        }).catch(err => {
-          console.log('Service Worker 등록 실패:', err);
-        });
-      });
-    }
   </script>
 </body>
 </html>
+
