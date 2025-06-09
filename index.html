@@ -40,41 +40,32 @@
     let map;
     let path = [];
     let polylines = [];
-    let currentMarker = null;
 
-    function getOpacityAndColorByMinutes(timestamp) {
+    // Function to calculate opacity based on minutes passed
+    function getOpacityByMinutes(timestamp) {
       const now = new Date();
       const past = new Date(timestamp);
       const minutesPassed = Math.floor((now - past) / (1000 * 60));
-      const daysPassed = Math.floor((now - past) / (1000 * 60 * 60 * 24));
 
-      let opacity = 1.0 - (minutesPassed * 0.01);
-      if (opacity < 0.3) {
-        opacity = 0.3;
-        if (daysPassed === 0) {
-          return { color: '#aaaaaa', opacity: opacity };
-        } else if (daysPassed === 1) {
-          return { color: '#555555', opacity: opacity };
-        } else {
-          return { color: '#000000', opacity: opacity };
-        }
-      }
-      return { color: '#00ffcc', opacity: opacity };
+      // Decrease opacity over time, with a minimum opacity of 0.1
+      let opacity = Math.max(1 - (minutesPassed * 0.02), 0.1); 
+      return opacity;
     }
 
+    // Function to draw the path on the map
     function drawPath() {
-      polylines.forEach(p => map.removeLayer(p));
+      polylines.forEach(p => map.removeLayer(p)); // Remove existing path layers
       polylines = [];
 
       for (let i = 1; i < path.length; i++) {
         const prev = path[i - 1];
         const curr = path[i];
         if (!curr.timestamp) continue;
-        const style = getOpacityAndColorByMinutes(curr.timestamp);
 
+        const opacity = getOpacityByMinutes(curr.timestamp);
         const segment = L.polyline([prev.latlng, curr.latlng], {
-          color: style.color,
-          opacity: style.opacity,
+          color: '#00ffcc', // You can modify this for different colors
+          opacity: opacity,
           weight: 4,
           lineCap: 'round',
         }).addTo(map);
@@ -82,12 +73,15 @@
       }
     }
 
+    // Insert some test data for the path (You can change this or use real GPS data)
     function insertTestData() {
       const now = Date.now();
       path = [
-        { latlng: [37.5665, 126.9780], timestamp: now - (60 * 60 * 1000) }, // 1시간 전
-        { latlng: [37.5670, 126.9785], timestamp: now - (30 * 60 * 1000) }, // 30분 전
-        { latlng: [37.5680, 126.9790], timestamp: now }, // 지금
+        { latlng: [37.5665, 126.9780], timestamp: now - (60 * 60 * 1000) }, // 1 hour ago
+        { latlng: [37.5670, 126.9785], timestamp: now - (30 * 60 * 1000) }, // 30 minutes ago
+        { latlng: [37.5680, 126.9790], timestamp: now - (10 * 60 * 1000) }, // 10 minutes ago
+        { latlng: [37.5690, 126.9795], timestamp: now - (5 * 60 * 1000) },  // 5 minutes ago
+        { latlng: [37.5700, 126.9800], timestamp: now }, // Now
       ];
       drawPath();
     }
@@ -101,4 +95,3 @@
   </script>
 </body>
 </html>
-
