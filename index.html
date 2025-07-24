@@ -1,111 +1,540 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#000000" />
-  <title>나의 대동여지도</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <style>
-    #map { height: 100vh; margin: 0; padding: 0; }
-    body { margin: 0; font-family: sans-serif; background: #000; }
-    #buttonContainer {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 1000;
-    }
-    button {
-      padding: 8px 16px;
-      margin: 4px;
-      background: #444;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #666;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>나의 대동여지도 - 시간별 경로 추적</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .main-content {
+            flex: 1;
+            position: relative;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 24px;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(5px);
+        }
+
+        .controls h3 {
+            margin-bottom: 15px;
+            color: #4ecdc4;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 12px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.active {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+        }
+
+        .status {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status h3 {
+            color: #4ecdc4;
+            margin-bottom: 10px;
+        }
+
+        .time-display {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            text-align: center;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .legend {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .legend h3 {
+            color: #4ecdc4;
+            margin-bottom: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 10px;
+            opacity: 0.4;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .instructions {
+            background: rgba(76, 175, 80, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4caf50;
+        }
+
+        .instructions h3 {
+            color: #4caf50;
+            margin-bottom: 10px;
+        }
+
+        .instructions p {
+            font-size: 13px;
+            line-height: 1.4;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 40vh;
+            }
+            
+            .main-content {
+                height: 60vh;
+            }
+            
+            #map {
+                height: 60vh;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div id="map"></div>
-  <div id="buttonContainer">
-    <button onclick="insertTestData()">테스트 경로 추가</button>
-  </div>
+    <div class="container">
+        <div class="sidebar">
+            <h1>나의 대동여지도</h1>
+            
+            <div class="instructions">
+                <h3>🗺️ 사용 방법</h3>
+                <p>• 지도를 클릭하여 경로 시작점 설정</p>
+                <p>• 두 번째 클릭으로 경로 완성</p>
+                <p>• 시뮬레이션으로 시간 변화 확인</p>
+                <p>• 시간 가속으로 빠른 테스트 가능</p>
+            </div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script>
-    let map;
-    let path = [];
-    let polylines = [];
-    let currentMarker = null;
+            <div class="controls">
+                <h3>⏱️ 시뮬레이션 제어</h3>
+                <div class="button-group">
+                    <button onclick="toggleSimulation()">시뮬레이션 시작</button>
+                    <button onclick="addRandomRoute()">새 경로 추가</button>
+                    <button onclick="clearAllRoutes()">모든 경로 삭제</button>
+                </div>
+                
+                <div class="button-group">
+                    <button onclick="setTimeSpeed(1)" class="speed-btn active">1x</button>
+                    <button onclick="setTimeSpeed(10)" class="speed-btn">10x</button>
+                    <button onclick="setTimeSpeed(60)" class="speed-btn">60x</button>
+                    <button onclick="setTimeSpeed(600)" class="speed-btn">600x</button>
+                </div>
+            </div>
 
-    // 분이 지난 시간을 기반으로 투명도 계산하는 함수
-    function getOpacityByMinutes(timestamp) {
-      const now = new Date();
-      const past = new Date(timestamp);
-      const minutesPassed = Math.floor((now - past) / (1000 * 60));
+            <div class="status">
+                <h3>📊 시뮬레이션 상태</h3>
+                <div class="time-display" id="currentTime">2024-01-01 12:00:00</div>
+                <div>시간 가속: <span id="speedDisplay">1x</span></div>
+                <div>활성 경로: <span id="routeCount">0</span>개</div>
+                <div>상태: <span id="simulationStatus">정지</span></div>
+            </div>
 
-      // 디버깅: 분과 투명도 값 출력
-      console.log(`분 경과: ${minutesPassed}`);
-      
-      // 시간에 따라 투명도 감소, 최소 투명도는 0.1
-      let opacity = Math.max(1 - (minutesPassed * 0.02), 0.1);
-      console.log(`계산된 투명도: ${opacity}`);
-      return opacity;
-    }
+            <div class="legend">
+                <h3>🎨 경로 단계별 변화</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FFFFFF; border: 1px solid #666;"></div>
+                    <span>1단계: 흰색 (100%→40% opacity, 10시간)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #90EE90;"></div>
+                    <span>1단계 말기: 연두색 (40% opacity)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #32CD32;"></div>
+                    <span>2단계: 초록색 (40% opacity, 14시간)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FFA500;"></div>
+                    <span>3단계: 주황색 (40% opacity, 7일)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF0000;"></div>
+                    <span>4단계: 빨간색 (40% opacity, 100일)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8B4513;"></div>
+                    <span>5단계: 갈색 (40% opacity, 영구)</span>
+                </div>
+            </div>
+        </div>
 
-    // 경로를 지도에 그리는 함수
-    function drawPath() {
-      // 기존 경로 제거
-      polylines.forEach(p => map.removeLayer(p)); 
-      polylines = [];
+        <div class="main-content">
+            <div id="map"></div>
+        </div>
+    </div>
+    <script>
+        // 전역 변수
+        let map;
+        let routes = [];
+        let simulationRunning = false;
+        let currentTime = new Date('2024-01-01T12:00:00');
+        let timeSpeed = 1;
+        let simulationInterval;
+        let clickPoints = [];
 
-      // 경로 그리기
-      for (let i = 1; i < path.length; i++) {
-        const prev = path[i - 1];
-        const curr = path[i];
-        if (!curr.timestamp) continue;
+        // 지도 초기화
+        function initMap() {
+            try {
+                map = L.map('map').setView([37.5665, 126.9780], 11);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
 
-        const opacity = getOpacityByMinutes(curr.timestamp);
-        const segment = L.polyline([prev.latlng, curr.latlng], {
-          color: '#00ffcc',
-          opacity: opacity,
-          weight: 4,
-          lineCap: 'round',
-        }).addTo(map);
-        polylines.push(segment);
-      }
+                // 지도 클릭 이벤트
+                map.on('click', function(e) {
+                    handleMapClick(e.latlng);
+                });
+                
+                // 지도 로딩 완료 이벤트
+                map.whenReady(function() {
+                    console.log('지도 초기화 및 로딩 완료');
+                });
+                
+            } catch (error) {
+                console.error('지도 초기화 실패:', error);
+            }
+        }
 
-      // 현재 위치에 마커 추가
-      if (currentMarker) {
-        currentMarker.setLatLng(path[path.length - 1].latlng);  // 현재 위치 업데이트
-      } else {
-        currentMarker = L.marker(path[path.length - 1].latlng).addTo(map);  // 첫 마커 추가
-      }
-    }
+        // 지도 클릭 처리
+        function handleMapClick(latlng) {
+            clickPoints.push(latlng);
+            
+            // 임시 마커 표시
+            L.circleMarker(latlng, {
+                color: '#ff0000',
+                radius: 5
+            }).addTo(map);
 
-    // 테스트 경로 데이터를 추가하는 함수
-    function insertTestData() {
-      const now = Date.now();
-      path = [
-        { latlng: [37.5665, 126.9780], timestamp: now - (60 * 60 * 1000) }, // 1시간 전
-        { latlng: [37.5670, 126.9785], timestamp: now - (30 * 60 * 1000) }, // 30분 전
-        { latlng: [37.5680, 126.9790], timestamp: now - (10 * 60 * 1000) }, // 10분 전
-        { latlng: [37.5690, 126.9795], timestamp: now - (5 * 60 * 1000) },  // 5분 전
-        { latlng: [37.5700, 126.9800], timestamp: now }, // 현재
-      ];
-      drawPath();
-    }
+            if (clickPoints.length === 2) {
+                createRoute(clickPoints[0], clickPoints[1]);
+                clickPoints = [];
+                
+                // 임시 마커들 제거
+                map.eachLayer(function(layer) {
+                    if (layer instanceof L.CircleMarker) {
+                        map.removeLayer(layer);
+                    }
+                });
+            }
+        }
 
-    window.addEventListener('load', () => {
-      map = L.map('map').setView([37.5665, 126.9780], 15);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap, CartoDB',
-      }).addTo(map);
-    });
-  </script>
+        // 경로 생성
+        function createRoute(start, end) {
+            const route = {
+                id: Date.now(),
+                coordinates: [start, end],
+                createdAt: new Date(currentTime),
+                polyline: null
+            };
+
+            const polyline = L.polyline([start, end], {
+                color: '#FFFFFF',
+                weight: 4,
+                opacity: 1.0
+            }).addTo(map);
+
+            route.polyline = polyline;
+            routes.push(route);
+            updateRouteCount();
+        }
+
+        // 랜덤 경로 추가
+        function addRandomRoute() {
+            if (!map) {
+                console.error('지도가 초기화되지 않았습니다.');
+                return;
+            }
+            
+            if (!map.getCenter) {
+                console.error('지도 메서드를 사용할 수 없습니다.');
+                return;
+            }
+            
+            try {
+                const center = map.getCenter();
+                
+                const start = L.latLng(
+                    center.lat + (Math.random() - 0.5) * 0.02,
+                    center.lng + (Math.random() - 0.5) * 0.02
+                );
+                
+                const end = L.latLng(
+                    center.lat + (Math.random() - 0.5) * 0.02,
+                    center.lng + (Math.random() - 0.5) * 0.02
+                );
+
+                createRoute(start, end);
+                console.log('랜덤 경로 추가 완료');
+            } catch (error) {
+                console.error('랜덤 경로 추가 실패:', error);
+            }
+        }
+
+        // 시간에 따른 경로 상태 계산
+        function getRouteState(ageInMinutes) {
+            if (ageInMinutes < 600) {
+                // 1단계: 흰색, opacity 감소 후 연두색으로 변경
+                const opacity = Math.max(0.4, 1.0 - (ageInMinutes / 600) * 0.6);
+                if (opacity <= 0.4) {
+                    return {
+                        color: '#90EE90',
+                        opacity: 0.4,
+                        stage: `1단계 (연두색)`,
+                        description: '40% opacity'
+                    };
+                }
+                return {
+                    color: '#FFFFFF',
+                    opacity: opacity,
+                    stage: `1단계 (흰색)`,
+                    description: `${Math.round(opacity * 100)}% opacity`
+                };
+            } else if (ageInMinutes < 1440) {
+                // 2단계: 초록색, 40% opacity
+                return {
+                    color: '#32CD32',
+                    opacity: 0.4,
+                    stage: `2단계 (초록색)`,
+                    description: '40% opacity'
+                };
+            } else if (ageInMinutes < 10080) {
+                // 3단계: 주황색, 40% opacity (7일)
+                return {
+                    color: '#FFA500',
+                    opacity: 0.4,
+                    stage: `3단계 (주황색)`,
+                    description: '40% opacity'
+                };
+            } else if (ageInMinutes < 144000) {
+                // 4단계: 빨간색, 40% opacity (100일)
+                return {
+                    color: '#FF0000',
+                    opacity: 0.4,
+                    stage: `4단계 (빨간색)`,
+                    description: '40% opacity'
+                };
+            } else {
+                // 5단계: 갈색, 40% opacity (영구)
+                return {
+                    color: '#8B4513',
+                    opacity: 0.4,
+                    stage: `5단계 (갈색)`,
+                    description: '40% opacity'
+                };
+            }
+        }
+
+        // 경로 업데이트
+        function updateRoutes() {
+            routes.forEach(route => {
+                const ageInMinutes = (currentTime - route.createdAt) / (1000 * 60);
+                const state = getRouteState(ageInMinutes);
+                
+                if (route.polyline) {
+                    route.polyline.setStyle({
+                        color: state.color,
+                        opacity: state.opacity
+                    });
+                }
+            });
+        }
+
+        // 시뮬레이션 토글
+        function toggleSimulation() {
+            if (simulationRunning) {
+                stopSimulation();
+            } else {
+                startSimulation();
+            }
+        }
+
+        // 시뮬레이션 시작
+        function startSimulation() {
+            simulationRunning = true;
+            simulationInterval = setInterval(() => {
+                currentTime = new Date(currentTime.getTime() + (1000 * 60 * timeSpeed));
+                updateRoutes();
+                updateTimeDisplay();
+            }, 1000);
+            
+            document.getElementById('simulationStatus').textContent = '실행중';
+            event.target.textContent = '시뮬레이션 정지';
+        }
+
+        // 시뮬레이션 정지
+        function stopSimulation() {
+            simulationRunning = false;
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+            }
+            
+            document.getElementById('simulationStatus').textContent = '정지';
+            document.querySelector('button[onclick="toggleSimulation()"]').textContent = '시뮬레이션 시작';
+        }
+
+        // 시간 가속 설정
+        function setTimeSpeed(speed) {
+            timeSpeed = speed;
+            document.getElementById('speedDisplay').textContent = speed + 'x';
+            
+            // 버튼 스타일 업데이트
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // 모든 경로 삭제
+        function clearAllRoutes() {
+            routes.forEach(route => {
+                if (route.polyline) {
+                    map.removeLayer(route.polyline);
+                }
+            });
+            routes = [];
+            updateRouteCount();
+        }
+
+        // 시간 표시 업데이트
+        function updateTimeDisplay() {
+            const timeString = currentTime.toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('currentTime').textContent = timeString;
+        }
+
+        // 경로 개수 업데이트
+        function updateRouteCount() {
+            document.getElementById('routeCount').textContent = routes.length;
+        }
+
+        // 초기화 - Leaflet 라이브러리 로딩 완료 후 실행
+        function initialize() {
+            if (typeof L === 'undefined') {
+                // Leaflet이 아직 로드되지 않았으면 잠시 후 다시 시도
+                setTimeout(initialize, 100);
+                return;
+            }
+            
+            initMap();
+            updateTimeDisplay();
+            updateRouteCount();
+            
+            // 자동 경로 추가 제거 - 사용자가 수동으로 추가하도록 변경
+            // setTimeout(() => {
+            //     if (map && map.getCenter) {
+            //         addRandomRoute();
+            //         addRandomRoute();  
+            //         addRandomRoute();
+            //     }
+            // }, 2000);
+        }
+
+        // DOM과 Leaflet 라이브러리가 모두 로드된 후 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            initialize();
+        });
+    </script>
 </body>
 </html>
