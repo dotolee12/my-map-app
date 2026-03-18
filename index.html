@@ -3,85 +3,115 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>나의 대동여지도</title>
+<title>나의 대동여지도 - 탐험</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
+/* 기존 스타일 유지 및 일부 추가/수정 */
 * { box-sizing:border-box; margin:0; padding:0; }
 html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif; }
 
 #map-wrap { position:absolute; inset:0; z-index:1; }
-#map { width:100%; height:100%; filter:grayscale(1) brightness(0.4); }
-#fog-canvas { position:absolute; inset:0; z-index:400; pointer-events:none; }
+/* 지도를 더 어둡게 하여 안개 효과 극대화 */
+#map { width:100%; height:100%; filter:grayscale(1) brightness(0.2) contrast(1.2); transition: filter 0.3s; }
+#map.fog-free { filter: none; } /* 안개 껐을 때 원본 지도 */
+#fog-canvas { position:absolute; inset:0; z-index:400; pointer-events:none; opacity: 0.95; transition: opacity 0.5s; }
+#fog-canvas.hidden { opacity: 0; }
 
+/* HUD 스타일 (기존 유지) */
 #hud-top {
   position:absolute; top:0; left:0; right:0; height:56px;
-  background:rgba(8,8,18,0.9); backdrop-filter:blur(12px);
+  background:rgba(8,8,18,0.85); backdrop-filter:blur(10px);
   border-bottom:0.5px solid rgba(255,255,255,0.07);
   display:flex; align-items:center; justify-content:space-between;
   padding:0 18px; z-index:1000;
 }
 #ham-btn { width:40px;height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:none;border:none;cursor:pointer; }
 .hline { width:20px;height:1.5px;background:rgba(255,255,255,0.75);border-radius:2px; }
-#app-title { font-size:14px;font-weight:500;color:rgba(255,255,255,0.75);letter-spacing:0.5px; }
+#app-title { font-size:15px;font-weight:600;color:rgba(255,255,255,0.9);letter-spacing:0.5px; }
 
-#rec-pill { display:flex;align-items:center;gap:5px;border-radius:20px;padding:5px 11px;font-size:10px;font-weight:500;cursor:pointer;transition:all 0.3s;border:0.5px solid; }
-#rec-pill.recording { background:rgba(220,50,50,0.15);border-color:rgba(220,50,50,0.35);color:rgba(220,80,80,0.95); }
-#rec-pill.idle      { background:rgba(240,192,64,0.12);border-color:rgba(240,192,64,0.3);color:rgba(240,192,64,0.9); }
-#rec-dot { width:7px;height:7px;border-radius:50%; }
-#rec-pill.recording #rec-dot { background:#e03232;animation:blink 1s infinite; }
-#rec-pill.idle #rec-dot      { background:#f0c040; }
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+/* 기록 버튼 스타일 수정: 탐험 시작/중지 */
+#rec-pill { display:flex;align-items:center;gap:6px;border-radius:20px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.3s;border:0.5px solid; }
+#rec-pill.recording { background:rgba(220,50,50,0.18);border-color:rgba(220,50,50,0.4);color:rgba(255,100,100,1); }
+#rec-pill.idle      { background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6); }
+#rec-dot { width:8px;height:8px;border-radius:50%; }
+#rec-pill.recording #rec-dot { background:#ff4444;animation:blink 1s infinite; box-shadow: 0 0 10px #ff4444; }
+#rec-pill.idle #rec-dot      { background:rgba(255,255,255,0.4); }
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
 
 #hud-bottom {
-  position:absolute; bottom:0; left:0; right:0; height:76px;
-  background:rgba(8,8,18,0.92); backdrop-filter:blur(12px);
-  border-top:0.5px solid rgba(255,255,255,0.07);
-  display:flex; align-items:center; padding:0 24px; z-index:1000;
+  position:absolute; bottom:0; left:0; right:0; height:80px;
+  background:rgba(8,8,18,0.9); backdrop-filter:blur(12px);
+  border-top:0.5px solid rgba(255,255,255,0.08);
+  display:flex; align-items:center; padding:0 20px; z-index:1000;
 }
-.stat-item { flex:1;display:flex;flex-direction:column;gap:3px; }
-.stat-item+.stat-item { border-left:0.5px solid rgba(255,255,255,0.08);padding-left:20px; }
-.stat-label { font-size:9px;color:rgba(255,255,255,0.32);letter-spacing:0.5px; }
-.stat-value { font-size:16px;font-weight:500;color:rgba(255,255,255,0.85); }
-.stat-value span { font-size:11px;color:rgba(255,255,255,0.35);margin-left:2px; }
+.stat-item { flex:1;display:flex;flex-direction:column;align-items:center;gap:4px; }
+.stat-item+.stat-item { border-left:0.5px solid rgba(255,255,255,0.08); }
+.stat-label { font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:0.5px;text-transform:uppercase; }
+.stat-value { font-size:18px;font-weight:700;color:rgba(255,255,255,0.95); }
+.stat-value span { font-size:12px;color:rgba(255,255,255,0.4);margin-left:2px;font-weight:400; }
 
-#gps-toast {
-  position:absolute; top:68px; left:50%; transform:translateX(-50%);
-  background:rgba(14,14,28,0.95); border:0.5px solid rgba(255,255,255,0.1);
-  border-radius:20px; padding:8px 16px; font-size:11px; color:rgba(255,255,255,0.6);
-  z-index:1000; white-space:nowrap; transition:opacity 0.4s;
-}
-#gps-toast.hidden { opacity:0; pointer-events:none; }
+/* 우측 하단 플로팅 버튼 */
+#action-buttons { position:absolute;bottom:94px;right:16px;z-index:1000;display:flex;flex-direction:column;gap:10px; }
+.action-btn { width:44px;height:44px;background:rgba(20,20,35,0.9);border:0.5px solid rgba(255,255,255,0.15);border-radius:12px;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.2s; }
+.action-btn:active { transform: scale(0.95); background:rgba(30,30,50,0.9); }
+.action-btn.active { background:rgba(240,192,64,0.2);border-color:rgba(240,192,64,0.4);color:#f0c040; box-shadow: 0 0 15px rgba(240,192,64,0.2); }
+/* 포인트 저장 버튼 스타일 */
+#btn-save-point { background: rgba(64, 120, 240, 0.2); border-color: rgba(64, 120, 240, 0.4); color: #6b9ef5; }
+#btn-save-point:active { background: rgba(64, 120, 240, 0.3); }
 
-#layer-toggle { position:absolute;bottom:88px;right:14px;z-index:1000;display:flex;flex-direction:column;gap:6px; }
-.layer-btn { width:40px;height:40px;background:rgba(10,10,22,0.9);border:0.5px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
-.layer-btn.active { background:rgba(240,192,64,0.15);border-color:rgba(240,192,64,0.35);color:#f0c040; }
-
-#panel { position:absolute;top:0;left:0;bottom:0;width:290px;background:rgba(10,10,20,0.97);backdrop-filter:blur(20px);z-index:2000;transform:translateX(-100%);transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;border-right:0.5px solid rgba(255,255,255,0.06); }
+/* 패널 스타일 (기존 유지 및 수정) */
+#panel { position:absolute;top:0;left:0;bottom:0;width:300px;background:rgba(10,10,20,0.98);backdrop-filter:blur(20px);z-index:2000;transform:translateX(-100%);transition:transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);display:flex;flex-direction:column;border-right:0.5px solid rgba(255,255,255,0.08); box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
 #panel.open { transform:translateX(0); }
-.panel-header { padding:64px 22px 20px;border-bottom:0.5px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between; }
-.panel-title { font-size:20px;font-weight:500;color:rgba(255,255,255,0.88); }
-#panel-close { width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.07);border:none;color:rgba(255,255,255,0.5);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
-.section-label { font-size:10px;font-weight:500;color:rgba(255,255,255,0.28);letter-spacing:1px;padding:18px 22px 8px; }
-.cur-pos-btn { margin:0 14px 4px;background:rgba(240,192,64,0.1);border:0.5px solid rgba(240,192,64,0.25);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:11px;cursor:pointer; }
-.cur-dot { width:10px;height:10px;border-radius:50%;background:#f0c040;box-shadow:0 0 0 3px rgba(240,192,64,0.2);flex-shrink:0; }
-.cur-label { font-size:14px;font-weight:500;color:#f0c040; }
-#memories-list { flex:1;overflow-y:auto;padding:0 14px;display:flex;flex-direction:column;gap:5px; }
-#memories-list::-webkit-scrollbar { display:none; }
-.mem-btn { border:none;border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:11px;cursor:pointer;width:100%;text-align:left; }
-.mem-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
-.mem-info { flex:1; }
-.mem-name { font-size:13px;font-weight:500;color:rgba(255,255,255,0.88); }
-.mem-meta { font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px; }
-.old-memories-btn { margin:6px 14px 0;background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer; }
-.old-label { font-size:13px;color:rgba(255,255,255,0.4); }
-.old-count { margin-left:auto;font-size:11px;color:rgba(255,255,255,0.25); }
+.panel-header { padding:60px 20px 15px;border-bottom:0.5px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between; }
+.panel-title { font-size:19px;font-weight:600;color:rgba(255,255,255,0.95); }
+#panel-close { width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.08);border:none;color:rgba(255,255,255,0.6);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center; transition: background 0.2s; }
+#panel-close:hover { background:rgba(255,255,255,0.15); }
+.section-label { font-size:11px;font-weight:600;color:rgba(255,255,255,0.3);letter-spacing:1px;text-transform:uppercase;padding:20px 20px 8px; }
 
-.player-marker { width:20px;height:20px;border-radius:50%;background:rgba(240,192,64,0.3);display:flex;align-items:center;justify-content:center;animation:pm 2s infinite; }
-@keyframes pm{0%,100%{transform:scale(1)}50%{transform:scale(1.6);opacity:0.6}}
-.player-inner { width:10px;height:10px;border-radius:50%;background:#f0c040; }
+/* 리스트 아이템 스타일 수정 */
+#memories-list { flex:1;overflow-y:auto;padding:0 12px;display:flex;flex-direction:column;gap:6px; }
+#memories-list::-webkit-scrollbar { width: 4px; }
+#memories-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.mem-btn { border:none;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;width:100%;text-align:left; background:rgba(255,255,255,0.03); border: 0.5px solid rgba(255,255,255,0.05); transition: all 0.2s; }
+.mem-btn:prepend { content:'📍'; font-size: 14px; }
+.mem-btn:hover { background:rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+.mem-info { flex:1; display: flex; flex-direction: column; gap: 2px; }
+.mem-name { font-size:14px;font-weight:600;color:rgba(255,255,255,0.9); }
+.mem-meta { font-size:11px;color:rgba(255,255,255,0.4); }
+.mem-note { font-size:12px; color:rgba(255,255,255,0.6); margin-top: 4px; line-height: 1.4; }
+
+/* 알림/토스트 (기존 유지) */
+#gps-toast {
+  position:absolute; top:70px; left:50%; transform:translateX(-50%);
+  background:rgba(20,20,35,0.95); border:0.5px solid rgba(255,255,255,0.15);
+  border-radius:25px; padding:10px 20px; font-size:12px; color:rgba(255,255,255,0.8);
+  z-index:1100; white-space:nowrap; transition:all 0.4s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 8px;
+}
+#gps-toast.hidden { opacity:0; transform:translateX(-50%) translateY(-10px); pointer-events:none; }
+
+/* 플레이어 및 포인트 마커 스타일 */
+.player-marker { width:24px;height:24px;border-radius:50%;background:rgba(240,192,64,0.25);display:flex;align-items:center;justify-content:center;animation:pulse 2s infinite; box-shadow: 0 0 15px rgba(240,192,64,0.3); }
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(240,192,64,0.5)}70%{box-shadow:0 0 0 15px rgba(240,192,64,0)}100%{box-shadow:0 0 0 0 rgba(240,192,64,0)}}
+.player-inner { width:12px;height:12px;border-radius:50%;background:#f0c040; border: 2px solid #fff; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+
+/* 저장된 포인트 마커 (기억의 점) */
+.point-marker { width: 16px; height: 16px; border-radius: 50%; background: #6b9ef5; border: 2px solid #fff; box-shadow: 0 0 10px rgba(107, 158, 245, 0.6); transition: transform 0.2s; }
+.point-marker:hover { transform: scale(1.2); }
+
+/* 초기 로딩 화면 */
+#loading-overlay { position: fixed; inset: 0; background: #0d0d18; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; color: rgba(255,255,255,0.8); transition: opacity 0.5s; }
+#loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner { width: 40px; height: 40px; border: 3px solid rgba(240,192,64,0.2); border-top-color: #f0c040; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 </style>
 </head>
 <body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div style="font-size:14px; letter-spacing:1px;">지도 정보를 불러오는 중...</div>
+</div>
 
 <div id="map-wrap">
   <div id="map"></div>
@@ -93,49 +123,53 @@ html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-f
     <div class="hline"></div><div class="hline"></div><div class="hline"></div>
   </button>
   <span id="app-title">나의 대동여지도</span>
-  <div id="rec-pill" class="recording" onclick="toggleRecord()">
+  <div id="rec-pill" class="idle" onclick="toggleExploration()">
     <div id="rec-dot"></div>
-    <span id="rec-label">기록 중</span>
+    <span id="rec-label">탐험 시작</span>
   </div>
 </div>
 
-<div id="gps-toast">📡 GPS 신호 찾는 중...</div>
+<div id="gps-toast" class="hidden">📡 <span>GPS 신호 찾는 중...</span></div>
 
 <div id="hud-bottom">
   <div class="stat-item">
-    <span class="stat-label">오늘 걸은 거리</span>
+    <span class="stat-label">탐험한 거리</span>
     <span class="stat-value" id="stat-total">0.00<span>km</span></span>
   </div>
   <div class="stat-item">
-    <span class="stat-label">새로운 길</span>
-    <span class="stat-value" id="stat-new">0.00<span>km</span></span>
+    <span class="stat-label">밝혀낸 영역</span>
+    <span class="stat-value" id="stat-revealed">0<span>%</span></span>
   </div>
   <div class="stat-item">
-    <span class="stat-label">기억</span>
-    <span class="stat-value" id="stat-count">0<span>개</span></span>
+    <span class="stat-label">저장된 기억</span>
+    <span class="stat-value" id="stat-points">0<span>개</span></span>
   </div>
 </div>
 
-<div id="layer-toggle">
-  <button class="layer-btn active" id="btn-fog" onclick="toggleFog()">🌫</button>
-  <button class="layer-btn" id="btn-loc" onclick="centerOnMe()">◎</button>
+<div id="action-buttons">
+  <button class="action-btn active" id="btn-fog" onclick="toggleFog()" title="안개 켜기/끄기">🌫</button>
+  <button class="action-btn" id="btn-save-point" onclick="requestSavePoint()" title="현재 위치 저장">📍</button>
+  <button class="action-btn" id="btn-loc" onclick="centerOnMe()" title="내 위치로">◎</button>
 </div>
 
 <div id="panel">
   <div class="panel-header">
-    <span class="panel-title">나의 대동여지도</span>
+    <span class="panel-title">탐험 기록</span>
     <button id="panel-close" onclick="togglePanel()">✕</button>
   </div>
-  <div class="section-label">현재</div>
-  <div class="cur-pos-btn" onclick="centerOnMe();togglePanel()">
-    <div class="cur-dot"></div>
-    <span class="cur-label">현 위치로</span>
+  <div class="section-label">도구</div>
+  <div class="mem-btn" onclick="centerOnMe();togglePanel()" style="margin: 0 12px; width: auto;">
+    <span>◎</span>
+    <div class="mem-info">
+      <div class="mem-name" style="color:#f0c040">현재 위치로 이동</div>
+    </div>
   </div>
-  <div class="section-label">기억들</div>
-  <div id="memories-list"></div>
-  <div id="old-memories-btn" class="old-memories-btn" style="display:none" onclick="alert('오래된 기억: ' + oldMemories.length + '개')">
-    <span class="old-label">오래된 기억들</span>
-    <span class="old-count" id="old-count"></span>
+  
+  <div class="section-label">저장된 기억들 (포인트)</div>
+  <div id="memories-list">
+    <div style="text-align:center; padding: 40px 20px; color:rgba(255,255,255,0.2); font-size:13px;">
+      아직 저장된 기억이 없습니다.<br>📍 버튼을 눌러 현재 위치를 기록하세요.
+    </div>
   </div>
 </div>
 
@@ -143,365 +177,553 @@ html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-f
 <script>
 
 // ════════════════════════════════════════════
-//  상태 — 최상단 선언으로 호이스팅 문제 방지
+//  전역 상태 및 설정
 // ════════════════════════════════════════════
-let recording     = true;
-let currentLatLng = null;
-let playerMarker  = null;
-let accCircle     = null;
-let todayLatlngs  = [];
-let segmentDist   = 0;   // 현재 기록 구간 거리
-let memories      = [];  // 최근 5개
-let oldMemories   = [];  // 6번째 이상
-let totalDist     = 0;
-let newDist       = 0;
-const COLORS = ['#6b9ef5','#52c4a0','#c478e0','#e06b8d','#e8a44a','#4dc8e8'];
+let isExplorering = false; // 탐험(기록) 중 여부
+let currentLatLng = null;   // 현재 GPS 위치
+let playerMarker  = null;   // 플레이어 마커
+let accuracyCircle = null;   // 정확도 원
+let tracePath     = null;   // 지나온 길 (Polyline)
+
+// 데이터 저장용 변수
+let revealedAreas = [];    // 밝혀진 영역 좌표들 ([lat, lng, radius])
+let pathCoords    = [];    // 지나온 길 좌표들 (LatLng)
+let savedPoints   = [];    // 저장된 특정 포인트들 ({latlng, name, note, time, color})
+let totalDistance = 0;      // 총 탐험 거리 (meters)
+
+// 설정
+const FOG_RADIUS_METERS = 35; // 한번에 밝혀지는 안개 반지름 (미터)
+const MIN_MOVE_DISTANCE = 5;  // 기록을 위한 최소 이동 거리 (미터)
+const STORAGE_KEY = 'daedong_map_data_v1';
 
 // ════════════════════════════════════════════
-//  지도 초기화
+//  지도 및 레이어 초기화
 // ════════════════════════════════════════════
-const map = L.map('map', { zoomControl:false, attributionControl:false });
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  maxZoom:19, subdomains:'abcd'
+const map = L.map('map', { 
+  zoomControl: false, 
+  attributionControl: false,
+  minZoom: 14,
+  maxZoom: 19
+});
+
+// 기본 지도 타일 (CartoDB Dark Matter 사용 - 어두운 컨셉 유지)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19,
+  subdomains: 'abcd'
 }).addTo(map);
-map.setView([37.5340, 126.9950], 17);
+
+// 초기 뷰 설정 (서울 시청 부근)
+map.setView([37.5665, 126.9780], 17);
+
+// 지나온 길 레이어 초기화
+tracePath = L.polyline([], {
+  color: '#f0c040', // 황색 (대동여지도 느낌)
+  weight: 3,
+  opacity: 0.7,
+  lineCap: 'round',
+  lineJoin: 'round',
+  dashArray: '1, 6' // 점선 효과
+}).addTo(map);
 
 // ════════════════════════════════════════════
-//  안개 캔버스
+//  안개 캔버스 (Fog of War) 구현
 // ════════════════════════════════════════════
-const fog  = document.getElementById('fog-canvas');
-const fctx = fog.getContext('2d');
+const fogCanvas = document.getElementById('fog-canvas');
+const fctx = fogCanvas.getContext('2d');
 let fogEnabled = true;
 
-function glowRadius() {
-  const lat = currentLatLng ? currentLatLng.lat : map.getCenter().lat;
-  const zoom = map.getZoom();
-  const mpp  = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
-  return Math.max(20, 15 / mpp);
+// 캔버스 크기를 화면 크기에 맞춤
+function resizeFogCanvas() {
+  fogCanvas.width = window.innerWidth;
+  fogCanvas.height = window.innerHeight;
+  drawFog();
 }
+window.addEventListener('resize', resizeFogCanvas);
 
-function resizeFog() {
-  fog.width  = window.innerWidth;
-  fog.height = window.innerHeight;
-  redrawFog();
-}
-window.addEventListener('resize', resizeFog);
+// 안개 그리기 핵심 로직
+function drawFog() {
+  const W = fogCanvas.width, H = fogCanvas.height;
+  fctx.clearRect(0, 0, W, H); // 캔버스 초기화
 
-let rafPending = false;
-function scheduleRedraw() {
-  if (rafPending) return;
-  rafPending = true;
-  requestAnimationFrame(() => { redrawFog(); rafPending = false; });
-}
-map.on('move zoom moveend zoomend', scheduleRedraw);
+  if (!fogEnabled || !currentLatLng) return;
 
-function redrawFog() {
-  const W = fog.width, H = fog.height;
-  fctx.clearRect(0, 0, W, H);
-  if (!fogEnabled) return;
-
-  fctx.fillStyle = 'rgba(0,0,0,0.82)';
+  // 1. 전체 영역을 어두운 안개로 채움
+  fctx.fillStyle = 'rgba(10, 10, 20, 0.98)'; // 지도 스타일과 맞춘 아주 어두운 색
   fctx.fillRect(0, 0, W, H);
 
+  // 2. 밝혀진 영역들을 안개에서 떼어냄 (Destination-Out)
   fctx.save();
   fctx.globalCompositeOperation = 'destination-out';
 
-  const r = glowRadius();
-  oldMemories.forEach(m       => glowPath(m.latlngs, r * 0.80, 0.28));
-  memories.slice(0,5).forEach(m => glowPath(m.latlngs, r * 0.92, 0.55));
-  if (todayLatlngs.length > 0)  glowPath(todayLatlngs, r, 1.0);
+  // 저장된 모든 밝혀진 영역 순회
+  revealedAreas.forEach(area => {
+    const latlng = L.latLng(area[0], area[1]);
+    const radiusMeters = area[2];
+    
+    // 지도 상의 좌표를 캔버스 상의 픽셀 좌표로 변환
+    const point = map.latLngToContainerPoint(latlng);
+    
+    // 미터 단위를 현재 줌 레벨에 맞는 픽셀 반지름으로 변환
+    const pixelRadius = metersToPixels(latlng.lat, radiusMeters);
+
+    // 그라데이션을 이용하여 부드러운 가장자리 표현
+    const gradient = fctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, pixelRadius);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');      // 중심은 완전히 투명하게 (떼어냄)
+    gradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.8)'); // 가장자리로 갈수록 덜 투명하게
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');     // 끝은 원래 안개 유지
+
+    fctx.fillStyle = gradient;
+    fctx.beginPath();
+    fctx.arc(point.x, point.y, pixelRadius, 0, Math.PI * 2);
+    fctx.fill();
+  });
 
   fctx.restore();
 }
 
-function glowPath(latlngs, radius, maxAlpha) {
-  if (!latlngs || latlngs.length === 0) return;
-  latlngs.forEach(ll => {
-    const p    = map.latLngToContainerPoint(ll);
-    const grad = fctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
-    grad.addColorStop(0,    `rgba(0,0,0,${maxAlpha})`);
-    grad.addColorStop(0.55, `rgba(0,0,0,${maxAlpha * 0.45})`);
-    grad.addColorStop(1,    'rgba(0,0,0,0)');
-    fctx.fillStyle = grad;
-    fctx.beginPath();
-    fctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-    fctx.fill();
+// 지도 이동/줌 완료 시 안개 다시 그리기 (위치 변환 갱신)
+map.on('moveend zoomend', drawFog);
+// 지도 이동 중에는 성능을 위해 안개를 그리지 않거나 간단하게 그림 (선택 사항)
+map.on('movestart', () => {
+  // fctx.clearRect(0, 0, fogCanvas.width, fogCanvas.height); 
+});
+
+// ════════════════════════════════════════════
+//  탐험 및 위치 처리 핵심 로직
+// ════════════════════════════════════════════
+
+// 탐험 시작/중지 토글
+function toggleExploration() {
+  isExplorering = !isExplorering;
+  
+  const recPill = document.getElementById('rec-pill');
+  const recLabel = document.getElementById('rec-label');
+  
+  if (isExplorering) {
+    recPill.className = 'recording';
+    recLabel.textContent = '탐험 중...';
+    showToast('🚀 탐험을 시작합니다. 발걸음을 옮겨주세요.');
+    
+    // 탐험 시작 시 현재 위치 주변 안개 즉시 제거
+    if (currentLatLng) {
+      revealArea(currentLatLng, FOG_RADIUS_METERS);
+    }
+  } else {
+    recPill.className = 'idle';
+    recLabel.textContent = '탐험 재개';
+    showToast('✋ 탐험을 일시 중지합니다.');
+  }
+}
+
+// 새로운 위치 정보 수신 시 처리
+function handleNewPosition(latlng, accuracy) {
+  // 1. 플레이어 마커 및 정확도 원 업데이트
+  updatePlayerMarker(latlng, accuracy);
+
+  // 처음 위치를 잡았을 때 지도 중심 이동
+  if (!currentLatLng) {
+    map.setView(latlng, 17);
+    hideLoading();
+    // 첫 위치 주변 안개 제거
+    revealedAreas = []; // 초기화 (필요시)
+    revealArea(latlng, FOG_RADIUS_METERS * 1.5); // 첫 지점은 조금 더 넓게
+  }
+
+  // 2. 탐험 중일 때만 기록 및 안개 제거 처리
+  if (isExplorering && currentLatLng) {
+    const distance = latlng.distanceTo(currentLatLng); // 이동 거리 계산 (미터)
+
+    // 유의미한 이동이 있었을 때만 처리
+    if (distance > MIN_MOVE_DISTANCE) {
+      // 총 거리 누적
+      totalDistance += distance;
+      
+      // 지나온 길 좌표 추가 및 레이어 업데이트
+      pathCoords.push(latlng);
+      tracePath.setLatLngs(pathCoords);
+      
+      // 새로운 위치 주변 안개 제거
+      revealArea(latlng, FOG_RADIUS_METERS);
+      
+      // 통계 업데이트
+      updateStats();
+      
+      // 데이터 저장
+      saveData();
+    }
+  }
+
+  currentLatLng = latlng;
+}
+
+// 특정 지점 주변 안개 밝히기
+function revealArea(latlng, radiusMeters) {
+  // 중복 계산 방지를 위해 간단한 최적화 가능 (예: 일정 거리 이상 바뀔때만 추가)
+  // 여기서는 단순하게 매번 추가 (revealedAreas가 너무 커지면 성능 저하 우려 -> 추후 최적화 필요)
+  
+  // 이미 밝혀진 영역들과 너무 겹치는지 확인 (최적화 예시)
+  const isRedundant = revealedAreas.some(area => {
+    const existingLatLng = L.latLng(area[0], area[1]);
+    const existingRadius = area[2];
+    // 새 지점이 기존 지점 반지름의 절반 내에 있으면 추가하지 않음
+    return latlng.distanceTo(existingLatLng) < existingRadius * 0.5; 
+  });
+
+  if (!isRedundant || revealedAreas.length === 0) {
+    revealedAreas.push([latlng.lat, latlng.lng, radiusMeters]);
+    drawFog(); // 안개 다시 그리기
+  }
+}
+
+// 플레이어 마커 업데이트
+function updatePlayerMarker(latlng, accuracy) {
+  if (!playerMarker) {
+    const playerIcon = L.divIcon({
+      className: '',
+      html: '<div class="player-marker"><div class="player-inner"></div></div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    playerMarker = L.marker(latlng, { icon: playerIcon, zIndexOffset: 1000 }).addTo(map);
+  } else {
+    playerMarker.setLatLng(latlng);
+  }
+
+  if (!accuracyCircle) {
+    accuracyCircle = L.circle(latlng, {
+      radius: accuracy,
+      color: 'rgba(240, 192, 64, 0.4)',
+      fillColor: 'rgba(240, 192, 64, 0.1)',
+      weight: 1,
+      interactive: false
+    }).addTo(map);
+  } else {
+    accuracyCircle.setLatLng(latlng).setRadius(accuracy);
+  }
+}
+
+// ════════════════════════════════════════════
+//  특정 포인트 저장 (기억의 점) 기능
+// ════════════════════════════════════════════
+
+// 포인트 저장 요청 (📍 버튼 클릭 시)
+function requestSavePoint() {
+  if (!currentLatLng) {
+    showToast('⚠️ 아직 현재 위치를 확인하지 못했습니다.');
+    return;
+  }
+
+  // 간단한 입력창 (모바일 브라우저 호환)
+  const pointName = prompt('✨ 이 장소의 이름을 남겨주세요:', `기억의 점 ${savedPoints.length + 1}`);
+  if (pointName === null) return; // 취소
+  
+  const pointNote = prompt('📝 간단한 메모를 남기시겠습니까? (선택):', '');
+
+  saveCurrentPoint(pointName || '이름 없는 기억', pointNote || '');
+}
+
+// 현재 위치를 포인트로 저장
+function saveCurrentPoint(name, note) {
+  const now = new Date();
+  const pointData = {
+    latlng: [currentLatLng.lat, currentLatLng.lng],
+    name: name,
+    note: note,
+    time: `${now.getMonth()+1}월 ${now.getDate()}일 ${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}`,
+    color: '#6b9ef5' // 포인트 기본 색상
+  };
+
+  savedPoints.push(pointData);
+  
+  // 지도에 포인트 마커 추가
+  addPointMarkerToMap(pointData);
+  
+  // 패널 리스트 갱신
+  renderPointsList();
+  
+  // 통계 업데이트
+  updateStats();
+  
+  // 데이터 저장
+  saveData();
+
+  showToast(`✅ '${name}' 장소를 저장했습니다.`);
+}
+
+// 지도에 포인트 마커 추가
+function addPointMarkerToMap(pointData) {
+  const pointIcon = L.divIcon({
+    className: '',
+    html: `<div class="point-marker" style="background:${pointData.color};" title="${pointData.name}"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+
+  const marker = L.marker(pointData.latlng, { icon: pointIcon }).addTo(map);
+  
+  // 마커 클릭 시 팝업 표시
+  marker.bindPopup(`
+    <div style="padding: 5px; color: #333;">
+      <strong style="font-size:14px; color:${pointData.color};">${pointData.name}</strong><br>
+      <span style="font-size:11px; color:#777;">${pointData.time}</span>
+      ${pointData.note ? `<p style="font-size:12px; margin-top:5px; border-top:0.5px solid #eee; padding-top:5px;">${pointData.note}</p>` : ''}
+    </div>
+  `);
+}
+
+// 패널의 포인트 리스트 렌더링
+function renderPointsList() {
+  const listContainer = document.getElementById('memories-list');
+  listContainer.innerHTML = ''; // 초기화
+
+  if (savedPoints.length === 0) {
+    listContainer.innerHTML = `<div style="text-align:center; padding: 40px 20px; color:rgba(255,255,255,0.2); font-size:13px;">아직 저장된 기억이 없습니다.<br>📍 버튼을 눌러 현재 위치를 기록하세요.</div>`;
+    return;
+  }
+
+  // 최신순으로 정렬하여 표시
+  [...savedPoints].reverse().forEach((point, index) => {
+    const originalIndex = savedPoints.length - 1 - index;
+    const item = document.createElement('div');
+    item.className = 'mem-btn';
+    item.innerHTML = `
+      <span>📍</span>
+      <div class="mem-info">
+        <div class="mem-name">${point.name}</div>
+        <div class="mem-meta">${point.time}</div>
+        ${point.note ? `<div class="mem-note">${point.note}</div>` : ''}
+      </div>
+    `;
+    // 클릭 시 해당 위치로 이동 및 패널 닫기
+    item.onclick = () => {
+      map.setView(point.latlng, 18);
+      // 필요시 팝업 열기
+      // findMarkerByLatLng(point.latlng).openPopup(); 
+      togglePanel();
+    };
+    listContainer.appendChild(item);
   });
 }
 
 // ════════════════════════════════════════════
-//  플레이어 마커
+//  GPS 위치 추적 설정
 // ════════════════════════════════════════════
-function setPlayerMarker(ll) {
-  if (!playerMarker) {
-    const el = document.createElement('div');
-    el.className = 'player-marker';
-    el.innerHTML = '<div class="player-inner"></div>';
-    const icon = L.divIcon({ html:el, className:'', iconSize:[20,20], iconAnchor:[10,10] });
-    playerMarker = L.marker(ll, { icon, zIndexOffset:1000 }).addTo(map);
-  } else {
-    playerMarker.setLatLng(ll);
+function startLocationTracking() {
+  if (!navigator.geolocation) {
+    showToast('⚠️ GPS를 지원하지 않는 브라우저입니다.');
+    hideLoading();
+    return;
   }
-}
 
-// ════════════════════════════════════════════
-//  거리 계산
-// ════════════════════════════════════════════
-function haversine(a, b) {
-  const R=6371000, φ1=a.lat*Math.PI/180, φ2=b.lat*Math.PI/180;
-  const Δφ=(b.lat-a.lat)*Math.PI/180, Δλ=(b.lng-a.lng)*Math.PI/180;
-  const x=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
-}
+  showToast('📡 GPS 신호를 찾는 중...');
 
-// ════════════════════════════════════════════
-//  위치 처리
-// ════════════════════════════════════════════
-function handlePosition(ll) {
-  if (!currentLatLng) map.setView(ll, 17);
-  setPlayerMarker(ll);
-
-  if (recording) {
-    if (currentLatLng) {
-      const d = haversine(currentLatLng, ll);
-      if (d > 10) {
-        totalDist   += d;
-        segmentDist += d;          // 구간 거리 누적
-        newDist     += d * 0.65;
-        todayLatlngs.push(ll);
-        updateStats();
-        scheduleRedraw();
-      }
-    } else {
-      todayLatlngs.push(ll);
-      scheduleRedraw();
-    }
-  }
-  currentLatLng = ll;
-}
-
-// ════════════════════════════════════════════
-//  GPS
-// ════════════════════════════════════════════
-function startGPS() {
-  if (!navigator.geolocation) { startSim(); return; }
-  showToast('📡 GPS 신호 찾는 중...');
+  // 위치 추적 시작
   navigator.geolocation.watchPosition(
-    pos => {
-      if (pos.coords.accuracy > 30) {
-        // 정확도 나쁠 때 accCircle 크기만 갱신하고 위치는 무시
-        if (accCircle) accCircle.setRadius(pos.coords.accuracy);
-        return;
+    (position) => {
+      const latlng = L.latLng(position.coords.latitude, position.coords.longitude);
+      const accuracy = position.coords.accuracy; // 미터 단위
+
+      // 정확도가 너무 낮으면 (예: 100m 이상) 무시하거나 경고 (선택 사항)
+      if (accuracy > 80) {
+        showToast('⚠️ GPS 정확도가 낮습니다. 창가나 야외로 이동해주세요.');
+        updatePlayerMarker(latlng, accuracy); // 위치는 업데이트하되 기록은 안함
+        currentLatLng = latlng; // 기준점은 업데이트
+        return; 
       }
+
       hideToast();
-      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
-      if (accCircle) accCircle.setLatLng(ll).setRadius(pos.coords.accuracy);
-      else accCircle = L.circle(ll, {
-        radius: pos.coords.accuracy,
-        color:'rgba(240,192,64,0.4)', fillColor:'rgba(240,192,64,0.06)',
-        fillOpacity:1, weight:1
-      }).addTo(map);
-      handlePosition(ll);
+      handleNewPosition(latlng, accuracy);
     },
-    err => {
-      // 권한 거부(1) vs 타임아웃(3) 구분
-      const msg = err.code === 1
-        ? '⚠️ 위치 권한이 거부됨 → 시뮬레이션 모드'
-        : '⚠️ GPS 신호 없음 → 시뮬레이션 모드';
+    (error) => {
+      console.error('GPS Error:', error);
+      let msg = '⚠️ 위치 정보를 가져올 수 없습니다.';
+      if (error.code === 1) msg = '⚠️ 위치 권한이 거부되었습니다. 설정에서 허용해주세요.';
+      else if (error.code === 3) msg = '⚠️ GPS 연결 시간이 초과되었습니다.';
       showToast(msg);
-      setTimeout(startSim, 1200);
+      hideLoading();
+      
+      // 테스트용: PC 등에서 GPS 안될 때 시뮬레이션 (개발 완료 후 제거 권장)
+      // if (confirm('GPS가 작동하지 않습니다. 테스트용 시뮬레이션을 시작할까요?')) startSimulation();
     },
-    { enableHighAccuracy:true, maximumAge:3000, timeout:15000 }
+    {
+      enableHighAccuracy: true, // 높은 정확도 요청 (배터리 소모 증가)
+      maximumAge: 5000,           // 5초 이내 캐시된 위치 사용 허용
+      timeout: 20000              // 20초 이내 응답 없으면 에러
+    }
   );
 }
 
 // ════════════════════════════════════════════
-//  시뮬레이션
+//  데이터 저장 및 복원 (localStorage)
 // ════════════════════════════════════════════
-function startSim() {
-  hideToast();
-  showToast('🚶 시뮬레이션 모드 (실제 폰에서는 GPS 자동 사용)');
-  setTimeout(hideToast, 3500);
-
-  const route = [
-    [37.53400,126.99500],[37.53414,126.99518],[37.53428,126.99535],
-    [37.53442,126.99520],[37.53456,126.99508],[37.53470,126.99524],
-    [37.53484,126.99542],[37.53496,126.99558],[37.53506,126.99543],
-    [37.53518,126.99527],[37.53530,126.99513],[37.53544,126.99528],
-    [37.53558,126.99545],[37.53570,126.99561],[37.53580,126.99547],
-    [37.53592,126.99531],[37.53606,126.99516],[37.53620,126.99530],
-    [37.53634,126.99548],[37.53646,126.99564],[37.53656,126.99549],
-    [37.53668,126.99533],[37.53682,126.99518],[37.53696,126.99532],
-  ];
-
-  let i = 0;
-  function step() {
-    if (!recording) { setTimeout(step, 800); return; }
-    if (i < route.length) {
-      handlePosition(L.latLng(route[i][0], route[i][1]));
-      i++;
-      setTimeout(step, 600);
-    }
-    // 한 바퀴만 실행 — 무한 누적 없음
-  }
-  step();
-}
-
-// ════════════════════════════════════════════
-//  기록 토글
-// ════════════════════════════════════════════
-function toggleRecord() {
-  recording = !recording;
-  document.getElementById('rec-label').textContent = recording ? '기록 중' : '기록 시작';
-  document.getElementById('rec-pill').className    = recording ? 'recording' : 'idle';
-
-  if (recording) {
-    currentLatLng = null; // 재시작 시 기준점 초기화
-    segmentDist   = 0;    // 새 구간 시작
-  } else {
-    if (todayLatlngs.length > 2) {
-      saveMemory();
-      todayLatlngs = [];
-      segmentDist  = 0;
-      scheduleRedraw(); // 기억 저장 후 화면 갱신
-    }
-  }
-}
-
-// ════════════════════════════════════════════
-//  기억 저장 & 렌더링
-// ════════════════════════════════════════════
-function saveMemory() {
-  const now = new Date();
-  const mem = {
-    color:   COLORS[memories.length % COLORS.length],
-    name:    '기억 ' + (memories.length + oldMemories.length + 1),
-    time:    now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0'),
-    km:      (segmentDist / 1000).toFixed(2), // 구간 거리만 저장
-    latlngs: [...todayLatlngs],
-  };
-
-  memories.unshift(mem);
-
-  // 5개 초과 시 oldMemories로 이동
-  if (memories.length > 5) {
-    oldMemories.unshift(memories.pop());
-  }
-
-  saveToStorage();
-  renderMemories();
-  updateStats();
-}
-
-function renderMemories() {
-  const list = document.getElementById('memories-list');
-  list.innerHTML = '';
-
-  memories.forEach(mem => {
-    const d = document.createElement('div');
-    d.className = 'mem-btn';
-    d.style.background = hexA(mem.color, .13);
-    d.style.border     = '0.5px solid ' + hexA(mem.color, .28);
-    d.innerHTML = `
-      <div class="mem-dot" style="background:${mem.color};box-shadow:0 0 0 3px ${hexA(mem.color,.2)}"></div>
-      <div class="mem-info">
-        <div class="mem-name">${mem.name}</div>
-        <div class="mem-meta">${mem.time} · ${mem.km}km</div>
-      </div>`;
-    d.onclick = () => {
-      if (mem.latlngs.length) map.setView(mem.latlngs[mem.latlngs.length - 1], 17);
-      togglePanel();
+function saveData() {
+  try {
+    const data = {
+      revealedAreas,
+      pathCoords: pathCoords.map(ll => [ll.lat, ll.lng]), // LatLng 객체를 배열로 변환
+      savedPoints,
+      totalDistance
     };
-    list.appendChild(d);
-  });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error('Data Save Failed:', e);
+    if (e.name === 'QuotaExceededError') {
+      showToast('⚠️ 저장 공간이 부족하여 탐험 정보 일부가 저장되지 않을 수 있습니다.');
+    }
+  }
+}
 
-  // 오래된 기억 버튼
-  const oldBtn = document.getElementById('old-memories-btn');
-  if (oldMemories.length > 0) {
-    oldBtn.style.display = 'flex';
-    document.getElementById('old-count').textContent = oldMemories.length + '개';
-  } else {
-    oldBtn.style.display = 'none';
+function loadSavedData() {
+  try {
+    const rawData = localStorage.getItem(STORAGE_KEY);
+    if (!rawData) return false;
+
+    const data = JSON.parse(rawData);
+    
+    // 데이터 복원
+    revealedAreas = data.revealedAreas || [];
+    savedPoints = data.savedPoints || [];
+    totalDistance = data.totalDistance || 0;
+    
+    // 좌표 배열을 LatLng 객체 배열로 변환
+    if (data.pathCoords) {
+      pathCoords = data.pathCoords.map(coord => L.latLng(coord[0], coord[1]));
+      tracePath.setLatLngs(pathCoords); // 레이어 업데이트
+    }
+
+    // 지도에 저장된 포인트 마커들 추가
+    savedPoints.forEach(point => addPointMarkerToMap(point));
+    
+    // UI 업데이트
+    renderPointsList();
+    updateStats();
+    drawFog(); // 밝혀진 안개 그리기
+
+    console.log('Saved data loaded successfully.');
+    return true;
+  } catch (e) {
+    console.error('Data Load Failed:', e);
+    return false;
   }
 }
 
 // ════════════════════════════════════════════
-//  localStorage
+//  유틸리티 및 UI 제어 함수
 // ════════════════════════════════════════════
-function saveToStorage() {
-  try {
-    const serialize = arr => arr.map(m => ({
-      ...m, latlngs: m.latlngs.map(ll => [ll.lat, ll.lng])
-    }));
-    localStorage.setItem('daedong_v2', JSON.stringify({
-      memories:    serialize(memories),
-      oldMemories: serialize(oldMemories),
-      totalDist, newDist
-    }));
-  } catch(e) { console.warn('storage save failed', e); }
-}
 
-function loadFromStorage() {
-  try {
-    const raw = localStorage.getItem('daedong_v2');
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    const deserialize = arr => (arr || []).map(m => ({
-      ...m, latlngs: m.latlngs.map(([lat,lng]) => L.latLng(lat, lng))
-    }));
-    memories    = deserialize(data.memories);
-    oldMemories = deserialize(data.oldMemories);
-    totalDist   = data.totalDist || 0;
-    newDist     = data.newDist   || 0;
-    renderMemories();
-    updateStats();
-    scheduleRedraw();
-  } catch(e) { console.warn('storage load failed', e); }
-}
-
-// ════════════════════════════════════════════
-//  유틸
-// ════════════════════════════════════════════
-function hexA(h, a) {
-  const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-
+// 통계 UI 업데이트
 function updateStats() {
-  document.getElementById('stat-total').innerHTML = (totalDist/1000).toFixed(2) + '<span>km</span>';
-  document.getElementById('stat-new').innerHTML   = (newDist/1000).toFixed(2)   + '<span>km</span>';
-  document.getElementById('stat-count').innerHTML = (memories.length + oldMemories.length) + '<span>개</span>';
+  // 거리: m -> km 변환
+  const distKm = (totalDistance / 1000).toFixed(2);
+  document.getElementById('stat-total').innerHTML = `${distKm}<span>km</span>`;
+  
+  // 포인트 개수
+  document.getElementById('stat-points').innerHTML = `${savedPoints.length}<span>개</span>`;
+
+  // 밝혀낸 영역 (간단 계산: 점 개수에 비례, 추후 면적 계산으로 발전 가능)
+  // 예시: 점 100개당 1%로 가정 (임시)
+  const revealedPercent = Math.min(100, Math.floor(revealedAreas.length / 50));
+  document.getElementById('stat-revealed').innerHTML = `${revealedPercent}<span>%</span>`;
 }
 
-function togglePanel() { document.getElementById('panel').classList.toggle('open'); }
-function centerOnMe()  { if (currentLatLng) map.setView(currentLatLng, 17); }
+// 미터 단위를 현재 줌 레벨에서의 픽셀 단위로 변환
+function metersToPixels(lat, meters) {
+  // Leaflet 내장 함수 활용 (지도 타일 해상도 기반)
+  const y = map.getSize().y;
+  const latAccuracy = map.distance(map.containerPointToLatLng([0, 0]), map.containerPointToLatLng([0, y])) / y;
+  return meters / latAccuracy;
+}
 
+// UI 제어
+function togglePanel() { document.getElementById('panel').classList.toggle('open'); }
+function centerOnMe()  { if (currentLatLng) map.setView(currentLatLng, 18); }
 function toggleFog() {
   fogEnabled = !fogEnabled;
-  document.getElementById('btn-fog').classList.toggle('active', fogEnabled);
-  redrawFog();
+  const btn = document.getElementById('btn-fog');
+  const canvas = document.getElementById('fog-canvas');
+  const mapDiv = document.getElementById('map');
+  
+  if (fogEnabled) {
+    btn.classList.add('active');
+    canvas.classList.remove('hidden');
+    mapDiv.classList.remove('fog-free');
+    drawFog();
+  } else {
+    btn.classList.remove('active');
+    canvas.classList.add('hidden');
+    mapDiv.classList.add('fog-free');
+  }
 }
 
+// 로딩 화면 제어
+function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
+
+// 토스트 알림 제어
 let toastTimer;
 function showToast(msg) {
   const t = document.getElementById('gps-toast');
-  t.textContent = msg;
+  t.querySelector('span').textContent = msg;
   t.classList.remove('hidden');
   clearTimeout(toastTimer);
+  // 4초 후 자동으로 숨김 (경고 메시지 등은 더 길게 유지하는게 좋음)
+  if (!msg.startsWith('⚠️')) {
+    toastTimer = setTimeout(hideToast, 4000);
+  }
 }
 function hideToast() {
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => document.getElementById('gps-toast').classList.add('hidden'), 300);
+  document.getElementById('gps-toast').classList.add('hidden');
 }
 
 // ════════════════════════════════════════════
-//  시작 — 지도 ready 후 storage 복원
+//  애플리케이션 시작
 // ════════════════════════════════════════════
-resizeFog();
+
+// 1. 캔버스 초기화
+resizeFogCanvas();
+
+// 2. 지도 준비 완료 후 로직 실행
 map.whenReady(() => {
-  loadFromStorage(); // 지도 준비 후 복원 — 좌표 변환 오류 방지
-  startGPS();
+  // 저장된 데이터 불러오기
+  const hasSavedData = loadSavedData();
+  
+  if (!hasSavedData) {
+    // 저장된 데이터가 없으면 안내 메시지
+    setTimeout(() => {
+      showToast('🗺️ 대동여지도 탐험에 오신 것을 환영합니다! 상단의 \'탐험 시작\' 버튼을 눌러주세요.');
+    }, 2000);
+  }
+
+  // 3. GPS 추적 시작
+  startLocationTracking();
 });
+
+// 테스트용 시뮬레이션 로직 (필요시 주석 해제하여 사용)
+/*
+let simIndex = 0;
+function startSimulation() {
+  isExplorering = true; // 탐험 상태로 가정
+  const startLat = 37.5665, startLng = 126.9780;
+  hideLoading();
+  
+  function nextStep() {
+    // 시청 주변을 사각형으로 도는 경로 시뮬레이션
+    let lat = startLat, lng = startLng;
+    if (simIndex < 10) lat += simIndex * 0.0001;
+    else if (simIndex < 20) { lat += 10 * 0.0001; lng += (simIndex-10) * 0.0001; }
+    else if (simIndex < 30) { lat += (30-simIndex) * 0.0001; lng += 10 * 0.0001; }
+    else if (simIndex < 40) { lng += (40-simIndex) * 0.0001; }
+    else { simIndex = 0; } // 무한 반복
+
+    const latlng = L.latLng(lat, lng);
+    handleNewPosition(latlng, 10 + Math.random() * 10);
+    
+    simIndex++;
+    if (isExplorering) setTimeout(nextStep, 1000); // 1초마다 이동
+  }
+  nextStep();
+}
+*/
+
 </script>
 </body>
 </html>
