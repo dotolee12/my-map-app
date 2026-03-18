@@ -8,7 +8,9 @@
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif; }
-#map { position:absolute; inset:0; z-index:1; filter:grayscale(1) brightness(0.45); }
+
+#map-wrap { position:absolute; inset:0; z-index:1; }
+#map { width:100%; height:100%; filter:grayscale(1) brightness(0.4); }
 #fog-canvas { position:absolute; inset:0; z-index:400; pointer-events:none; }
 
 #hud-top {
@@ -70,7 +72,9 @@ html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-f
 .mem-info { flex:1; }
 .mem-name { font-size:13px;font-weight:500;color:rgba(255,255,255,0.88); }
 .mem-meta { font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px; }
-.mem-km   { font-size:11px;color:rgba(255,255,255,0.4);font-weight:500; }
+.old-memories-btn { margin:6px 14px 0;background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer; }
+.old-label { font-size:13px;color:rgba(255,255,255,0.4); }
+.old-count { margin-left:auto;font-size:11px;color:rgba(255,255,255,0.25); }
 
 .player-marker { width:20px;height:20px;border-radius:50%;background:rgba(240,192,64,0.3);display:flex;align-items:center;justify-content:center;animation:pm 2s infinite; }
 @keyframes pm{0%,100%{transform:scale(1)}50%{transform:scale(1.6);opacity:0.6}}
@@ -79,7 +83,9 @@ html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-f
 </head>
 <body>
 
-<div id="map"></div>
+<div id="map-wrap">
+  <div id="map"></div>
+</div>
 <canvas id="fog-canvas"></canvas>
 
 <div id="hud-top">
@@ -127,35 +133,51 @@ html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-f
   </div>
   <div class="section-label">기억들</div>
   <div id="memories-list"></div>
+  <div id="old-memories-btn" class="old-memories-btn" style="display:none" onclick="alert('오래된 기억: ' + oldMemories.length + '개')">
+    <span class="old-label">오래된 기억들</span>
+    <span class="old-count" id="old-count"></span>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// ── 지도: grayscale + 어둡게 (CSS로 처리)
-// 걸은 곳만 fog canvas를 밝게 뚫어서 명암 표현
+
+// ════════════════════════════════════════════
+//  상태 — 최상단 선언으로 호이스팅 문제 방지
+// ════════════════════════════════════════════
+let recording     = true;
+let currentLatLng = null;
+let playerMarker  = null;
+let accCircle     = null;
+let todayLatlngs  = [];
+let segmentDist   = 0;   // 현재 기록 구간 거리
+let memories      = [];  // 최근 5개
+let oldMemories   = [];  // 6번째 이상
+let totalDist     = 0;
+let newDist       = 0;
+const COLORS = ['#6b9ef5','#52c4a0','#c478e0','#e06b8d','#e8a44a','#4dc8e8'];
+
+// ════════════════════════════════════════════
+//  지도 초기화
+// ════════════════════════════════════════════
 const map = L.map('map', { zoomControl:false, attributionControl:false });
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
   maxZoom:19, subdomains:'abcd'
 }).addTo(map);
 map.setView([37.5340, 126.9950], 17);
 
-// ── 안개 캔버스 ────────────────────────────────
-// 전략:
-// 1) 전체를 어두운 오버레이로 덮음
-// 2) 걸은 경로 각 점마다 radial gradient로 밝은 원을 그림
-//    → 중심 투명(밝음) → 가장자리 불투명(어두움)
-//    → 지도가 자연스럽게 밝게 드러남
+// ════════════════════════════════════════════
+//  안개 캔버스
+// ════════════════════════════════════════════
 const fog  = document.getElementById('fog-canvas');
 const fctx = fog.getContext('2d');
 let fogEnabled = true;
 
-// 줌 레벨에 따른 glow 반경(픽셀) 계산
-// 실제 15m를 현재 줌의 픽셀로 변환
 function glowRadius() {
+  const lat = currentLatLng ? currentLatLng.lat : map.getCenter().lat;
   const zoom = map.getZoom();
-  // Leaflet: zoom 17 ≈ 1m ≈ 0.746px (위도 37° 기준)
-  const metersPerPx = 156543.03392 * Math.cos(37.53 * Math.PI / 180) / Math.pow(2, zoom);
-  return Math.max(18, 15 / metersPerPx); // 15m를 픽셀로
+  const mpp  = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+  return Math.max(20, 15 / mpp);
 }
 
 function resizeFog() {
@@ -164,45 +186,42 @@ function resizeFog() {
   redrawFog();
 }
 window.addEventListener('resize', resizeFog);
-map.on('move zoom moveend zoomend', redrawFog);
+
+let rafPending = false;
+function scheduleRedraw() {
+  if (rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(() => { redrawFog(); rafPending = false; });
+}
+map.on('move zoom moveend zoomend', scheduleRedraw);
 
 function redrawFog() {
   const W = fog.width, H = fog.height;
   fctx.clearRect(0, 0, W, H);
   if (!fogEnabled) return;
 
-  // 1) 어두운 오버레이 전체 덮기
   fctx.fillStyle = 'rgba(0,0,0,0.82)';
   fctx.fillRect(0, 0, W, H);
 
-  // 2) destination-out + radial gradient로 걸은 곳만 밝히기
   fctx.save();
   fctx.globalCompositeOperation = 'destination-out';
 
   const r = glowRadius();
-
-  // 오래된 기억 → 희미하게 (alpha 0.22)
-  memories.slice(5).forEach(m  => glowPath(m.latlngs, r * 0.8, 0.22));
-  // 최근 기억   → 중간 (alpha 0.45)
-  memories.slice(0,5).forEach(m => glowPath(m.latlngs, r * 0.9, 0.45));
-  // 오늘 경로   → 선명하게 (alpha 1.0)
-  if (todayLatlngs.length > 0)   glowPath(todayLatlngs, r, 1.0);
+  oldMemories.forEach(m       => glowPath(m.latlngs, r * 0.80, 0.28));
+  memories.slice(0,5).forEach(m => glowPath(m.latlngs, r * 0.92, 0.55));
+  if (todayLatlngs.length > 0)  glowPath(todayLatlngs, r, 1.0);
 
   fctx.restore();
 }
 
-// 경로 각 점마다 radial gradient(glow) 그리기
 function glowPath(latlngs, radius, maxAlpha) {
-  if (latlngs.length === 0) return;
+  if (!latlngs || latlngs.length === 0) return;
   latlngs.forEach(ll => {
-    const p = map.latLngToContainerPoint(ll);
+    const p    = map.latLngToContainerPoint(ll);
     const grad = fctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
-    // 중심: 완전 투명하게 뚫림 (지도 원색 드러남)
-    grad.addColorStop(0,   `rgba(0,0,0,${maxAlpha})`);
-    // 중간: 부드럽게 페이드
-    grad.addColorStop(0.5, `rgba(0,0,0,${maxAlpha * 0.6})`);
-    // 가장자리: 완전 어두움 유지
-    grad.addColorStop(1,   'rgba(0,0,0,0)');
+    grad.addColorStop(0,    `rgba(0,0,0,${maxAlpha})`);
+    grad.addColorStop(0.55, `rgba(0,0,0,${maxAlpha * 0.45})`);
+    grad.addColorStop(1,    'rgba(0,0,0,0)');
     fctx.fillStyle = grad;
     fctx.beginPath();
     fctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
@@ -210,17 +229,9 @@ function glowPath(latlngs, radius, maxAlpha) {
   });
 }
 
-// ── 상태 ──────────────────────────────────────
-let recording     = true;
-let currentLatLng = null;
-let playerMarker  = null;
-let accCircle     = null;
-let todayLatlngs  = [];
-let memories      = [];
-let totalDist     = 0;
-let newDist       = 0;
-const COLORS = ['#6b9ef5','#52c4a0','#c478e0','#e06b8d','#e8a44a','#4dc8e8'];
-
+// ════════════════════════════════════════════
+//  플레이어 마커
+// ════════════════════════════════════════════
 function setPlayerMarker(ll) {
   if (!playerMarker) {
     const el = document.createElement('div');
@@ -233,6 +244,9 @@ function setPlayerMarker(ll) {
   }
 }
 
+// ════════════════════════════════════════════
+//  거리 계산
+// ════════════════════════════════════════════
 function haversine(a, b) {
   const R=6371000, φ1=a.lat*Math.PI/180, φ2=b.lat*Math.PI/180;
   const Δφ=(b.lat-a.lat)*Math.PI/180, Δλ=(b.lng-a.lng)*Math.PI/180;
@@ -240,32 +254,45 @@ function haversine(a, b) {
   return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
 
+// ════════════════════════════════════════════
+//  위치 처리
+// ════════════════════════════════════════════
 function handlePosition(ll) {
   if (!currentLatLng) map.setView(ll, 17);
   setPlayerMarker(ll);
+
   if (recording) {
     if (currentLatLng) {
       const d = haversine(currentLatLng, ll);
-      if (d > 2) {
-        totalDist += d;
-        newDist   += d * 0.65;
+      if (d > 10) {
+        totalDist   += d;
+        segmentDist += d;          // 구간 거리 누적
+        newDist     += d * 0.65;
         todayLatlngs.push(ll);
         updateStats();
-        redrawFog();
+        scheduleRedraw();
       }
     } else {
       todayLatlngs.push(ll);
-      redrawFog();
+      scheduleRedraw();
     }
   }
   currentLatLng = ll;
 }
 
+// ════════════════════════════════════════════
+//  GPS
+// ════════════════════════════════════════════
 function startGPS() {
   if (!navigator.geolocation) { startSim(); return; }
   showToast('📡 GPS 신호 찾는 중...');
   navigator.geolocation.watchPosition(
     pos => {
+      if (pos.coords.accuracy > 30) {
+        // 정확도 나쁠 때 accCircle 크기만 갱신하고 위치는 무시
+        if (accCircle) accCircle.setRadius(pos.coords.accuracy);
+        return;
+      }
       hideToast();
       const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
       if (accCircle) accCircle.setLatLng(ll).setRadius(pos.coords.accuracy);
@@ -276,27 +303,35 @@ function startGPS() {
       }).addTo(map);
       handlePosition(ll);
     },
-    () => { showToast('⚠️ GPS 사용 불가 → 시뮬레이션 모드'); setTimeout(startSim, 1200); },
+    err => {
+      // 권한 거부(1) vs 타임아웃(3) 구분
+      const msg = err.code === 1
+        ? '⚠️ 위치 권한이 거부됨 → 시뮬레이션 모드'
+        : '⚠️ GPS 신호 없음 → 시뮬레이션 모드';
+      showToast(msg);
+      setTimeout(startSim, 1200);
+    },
     { enableHighAccuracy:true, maximumAge:3000, timeout:15000 }
   );
 }
 
+// ════════════════════════════════════════════
+//  시뮬레이션
+// ════════════════════════════════════════════
 function startSim() {
   hideToast();
   showToast('🚶 시뮬레이션 모드 (실제 폰에서는 GPS 자동 사용)');
   setTimeout(hideToast, 3500);
 
   const route = [
-    [37.53400,126.99500],[37.53410,126.99512],[37.53422,126.99530],
-    [37.53435,126.99518],[37.53448,126.99505],[37.53460,126.99520],
-    [37.53472,126.99538],[37.53480,126.99555],[37.53488,126.99540],
-    [37.53495,126.99522],[37.53505,126.99510],[37.53515,126.99525],
-    [37.53525,126.99542],[37.53535,126.99558],[37.53542,126.99545],
-    [37.53550,126.99530],[37.53560,126.99515],[37.53572,126.99528],
-    [37.53582,126.99545],[37.53590,126.99562],[37.53598,126.99548],
-    [37.53606,126.99532],[37.53616,126.99518],[37.53628,126.99530],
-    [37.53638,126.99548],[37.53645,126.99565],[37.53652,126.99550],
-    [37.53660,126.99535],[37.53670,126.99520],[37.53682,126.99533],
+    [37.53400,126.99500],[37.53414,126.99518],[37.53428,126.99535],
+    [37.53442,126.99520],[37.53456,126.99508],[37.53470,126.99524],
+    [37.53484,126.99542],[37.53496,126.99558],[37.53506,126.99543],
+    [37.53518,126.99527],[37.53530,126.99513],[37.53544,126.99528],
+    [37.53558,126.99545],[37.53570,126.99561],[37.53580,126.99547],
+    [37.53592,126.99531],[37.53606,126.99516],[37.53620,126.99530],
+    [37.53634,126.99548],[37.53646,126.99564],[37.53656,126.99549],
+    [37.53668,126.99533],[37.53682,126.99518],[37.53696,126.99532],
   ];
 
   let i = 0;
@@ -305,32 +340,55 @@ function startSim() {
     if (i < route.length) {
       handlePosition(L.latLng(route[i][0], route[i][1]));
       i++;
-      setTimeout(step, 500);
-    } else {
-      if (todayLatlngs.length > 3) { saveMemory(); todayLatlngs = []; }
-      i = 0; currentLatLng = null;
-      setTimeout(step, 1200);
+      setTimeout(step, 600);
     }
+    // 한 바퀴만 실행 — 무한 누적 없음
   }
   step();
 }
 
+// ════════════════════════════════════════════
+//  기록 토글
+// ════════════════════════════════════════════
 function toggleRecord() {
   recording = !recording;
   document.getElementById('rec-label').textContent = recording ? '기록 중' : '기록 시작';
   document.getElementById('rec-pill').className    = recording ? 'recording' : 'idle';
-  if (!recording && todayLatlngs.length > 2) { saveMemory(); todayLatlngs = []; }
+
+  if (recording) {
+    currentLatLng = null; // 재시작 시 기준점 초기화
+    segmentDist   = 0;    // 새 구간 시작
+  } else {
+    if (todayLatlngs.length > 2) {
+      saveMemory();
+      todayLatlngs = [];
+      segmentDist  = 0;
+      scheduleRedraw(); // 기억 저장 후 화면 갱신
+    }
+  }
 }
 
+// ════════════════════════════════════════════
+//  기억 저장 & 렌더링
+// ════════════════════════════════════════════
 function saveMemory() {
   const now = new Date();
-  memories.unshift({
+  const mem = {
     color:   COLORS[memories.length % COLORS.length],
-    name:    '기억 ' + (memories.length + 1),
+    name:    '기억 ' + (memories.length + oldMemories.length + 1),
     time:    now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0'),
-    km:      (totalDist / 1000).toFixed(2),
+    km:      (segmentDist / 1000).toFixed(2), // 구간 거리만 저장
     latlngs: [...todayLatlngs],
-  });
+  };
+
+  memories.unshift(mem);
+
+  // 5개 초과 시 oldMemories로 이동
+  if (memories.length > 5) {
+    oldMemories.unshift(memories.pop());
+  }
+
+  saveToStorage();
   renderMemories();
   updateStats();
 }
@@ -338,7 +396,8 @@ function saveMemory() {
 function renderMemories() {
   const list = document.getElementById('memories-list');
   list.innerHTML = '';
-  memories.slice(0,5).forEach(mem => {
+
+  memories.forEach(mem => {
     const d = document.createElement('div');
     d.className = 'mem-btn';
     d.style.background = hexA(mem.color, .13);
@@ -347,30 +406,76 @@ function renderMemories() {
       <div class="mem-dot" style="background:${mem.color};box-shadow:0 0 0 3px ${hexA(mem.color,.2)}"></div>
       <div class="mem-info">
         <div class="mem-name">${mem.name}</div>
-        <div class="mem-meta">${mem.time}</div>
-      </div>
-      <div class="mem-km">${mem.km}km</div>`;
+        <div class="mem-meta">${mem.time} · ${mem.km}km</div>
+      </div>`;
     d.onclick = () => {
-      if (mem.latlngs.length) map.setView(mem.latlngs[mem.latlngs.length-1], 17);
+      if (mem.latlngs.length) map.setView(mem.latlngs[mem.latlngs.length - 1], 17);
       togglePanel();
     };
     list.appendChild(d);
   });
+
+  // 오래된 기억 버튼
+  const oldBtn = document.getElementById('old-memories-btn');
+  if (oldMemories.length > 0) {
+    oldBtn.style.display = 'flex';
+    document.getElementById('old-count').textContent = oldMemories.length + '개';
+  } else {
+    oldBtn.style.display = 'none';
+  }
 }
 
+// ════════════════════════════════════════════
+//  localStorage
+// ════════════════════════════════════════════
+function saveToStorage() {
+  try {
+    const serialize = arr => arr.map(m => ({
+      ...m, latlngs: m.latlngs.map(ll => [ll.lat, ll.lng])
+    }));
+    localStorage.setItem('daedong_v2', JSON.stringify({
+      memories:    serialize(memories),
+      oldMemories: serialize(oldMemories),
+      totalDist, newDist
+    }));
+  } catch(e) { console.warn('storage save failed', e); }
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem('daedong_v2');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    const deserialize = arr => (arr || []).map(m => ({
+      ...m, latlngs: m.latlngs.map(([lat,lng]) => L.latLng(lat, lng))
+    }));
+    memories    = deserialize(data.memories);
+    oldMemories = deserialize(data.oldMemories);
+    totalDist   = data.totalDist || 0;
+    newDist     = data.newDist   || 0;
+    renderMemories();
+    updateStats();
+    scheduleRedraw();
+  } catch(e) { console.warn('storage load failed', e); }
+}
+
+// ════════════════════════════════════════════
+//  유틸
+// ════════════════════════════════════════════
 function hexA(h, a) {
   const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
   return `rgba(${r},${g},${b},${a})`;
 }
 
 function updateStats() {
-  document.getElementById('stat-total').innerHTML = (totalDist/1000).toFixed(2)+'<span>km</span>';
-  document.getElementById('stat-new').innerHTML   = (newDist/1000).toFixed(2)  +'<span>km</span>';
-  document.getElementById('stat-count').innerHTML = memories.length             +'<span>개</span>';
+  document.getElementById('stat-total').innerHTML = (totalDist/1000).toFixed(2) + '<span>km</span>';
+  document.getElementById('stat-new').innerHTML   = (newDist/1000).toFixed(2)   + '<span>km</span>';
+  document.getElementById('stat-count').innerHTML = (memories.length + oldMemories.length) + '<span>개</span>';
 }
 
 function togglePanel() { document.getElementById('panel').classList.toggle('open'); }
 function centerOnMe()  { if (currentLatLng) map.setView(currentLatLng, 17); }
+
 function toggleFog() {
   fogEnabled = !fogEnabled;
   document.getElementById('btn-fog').classList.toggle('active', fogEnabled);
@@ -380,7 +485,8 @@ function toggleFog() {
 let toastTimer;
 function showToast(msg) {
   const t = document.getElementById('gps-toast');
-  t.textContent = msg; t.classList.remove('hidden');
+  t.textContent = msg;
+  t.classList.remove('hidden');
   clearTimeout(toastTimer);
 }
 function hideToast() {
@@ -388,8 +494,14 @@ function hideToast() {
   toastTimer = setTimeout(() => document.getElementById('gps-toast').classList.add('hidden'), 300);
 }
 
+// ════════════════════════════════════════════
+//  시작 — 지도 ready 후 storage 복원
+// ════════════════════════════════════════════
 resizeFog();
-startGPS();
+map.whenReady(() => {
+  loadFromStorage(); // 지도 준비 후 복원 — 좌표 변환 오류 방지
+  startGPS();
+});
 </script>
 </body>
 </html>
