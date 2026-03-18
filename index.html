@@ -1,540 +1,395 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>나의 대동여지도 - 시간별 경로 추적</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>나의 대동여지도</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { width:100%; height:100%; overflow:hidden; background:#0d0d18; font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif; }
+#map { position:absolute; inset:0; z-index:1; filter:grayscale(1) brightness(0.45); }
+#fog-canvas { position:absolute; inset:0; z-index:400; pointer-events:none; }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            color: #fff;
-            min-height: 100vh;
-        }
+#hud-top {
+  position:absolute; top:0; left:0; right:0; height:56px;
+  background:rgba(8,8,18,0.9); backdrop-filter:blur(12px);
+  border-bottom:0.5px solid rgba(255,255,255,0.07);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 18px; z-index:1000;
+}
+#ham-btn { width:40px;height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:none;border:none;cursor:pointer; }
+.hline { width:20px;height:1.5px;background:rgba(255,255,255,0.75);border-radius:2px; }
+#app-title { font-size:14px;font-weight:500;color:rgba(255,255,255,0.75);letter-spacing:0.5px; }
 
-        .container {
-            display: flex;
-            height: 100vh;
-        }
+#rec-pill { display:flex;align-items:center;gap:5px;border-radius:20px;padding:5px 11px;font-size:10px;font-weight:500;cursor:pointer;transition:all 0.3s;border:0.5px solid; }
+#rec-pill.recording { background:rgba(220,50,50,0.15);border-color:rgba(220,50,50,0.35);color:rgba(220,80,80,0.95); }
+#rec-pill.idle      { background:rgba(240,192,64,0.12);border-color:rgba(240,192,64,0.3);color:rgba(240,192,64,0.9); }
+#rec-dot { width:7px;height:7px;border-radius:50%; }
+#rec-pill.recording #rec-dot { background:#e03232;animation:blink 1s infinite; }
+#rec-pill.idle #rec-dot      { background:#f0c040; }
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
 
-        .sidebar {
-            width: 350px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            overflow-y: auto;
-            backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
-        }
+#hud-bottom {
+  position:absolute; bottom:0; left:0; right:0; height:76px;
+  background:rgba(8,8,18,0.92); backdrop-filter:blur(12px);
+  border-top:0.5px solid rgba(255,255,255,0.07);
+  display:flex; align-items:center; padding:0 24px; z-index:1000;
+}
+.stat-item { flex:1;display:flex;flex-direction:column;gap:3px; }
+.stat-item+.stat-item { border-left:0.5px solid rgba(255,255,255,0.08);padding-left:20px; }
+.stat-label { font-size:9px;color:rgba(255,255,255,0.32);letter-spacing:0.5px; }
+.stat-value { font-size:16px;font-weight:500;color:rgba(255,255,255,0.85); }
+.stat-value span { font-size:11px;color:rgba(255,255,255,0.35);margin-left:2px; }
 
-        .main-content {
-            flex: 1;
-            position: relative;
-        }
+#gps-toast {
+  position:absolute; top:68px; left:50%; transform:translateX(-50%);
+  background:rgba(14,14,28,0.95); border:0.5px solid rgba(255,255,255,0.1);
+  border-radius:20px; padding:8px 16px; font-size:11px; color:rgba(255,255,255,0.6);
+  z-index:1000; white-space:nowrap; transition:opacity 0.4s;
+}
+#gps-toast.hidden { opacity:0; pointer-events:none; }
 
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-size: 24px;
-        }
+#layer-toggle { position:absolute;bottom:88px;right:14px;z-index:1000;display:flex;flex-direction:column;gap:6px; }
+.layer-btn { width:40px;height:40px;background:rgba(10,10,22,0.9);border:0.5px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+.layer-btn.active { background:rgba(240,192,64,0.15);border-color:rgba(240,192,64,0.35);color:#f0c040; }
 
-        .controls {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            backdrop-filter: blur(5px);
-        }
+#panel { position:absolute;top:0;left:0;bottom:0;width:290px;background:rgba(10,10,20,0.97);backdrop-filter:blur(20px);z-index:2000;transform:translateX(-100%);transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;border-right:0.5px solid rgba(255,255,255,0.06); }
+#panel.open { transform:translateX(0); }
+.panel-header { padding:64px 22px 20px;border-bottom:0.5px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between; }
+.panel-title { font-size:20px;font-weight:500;color:rgba(255,255,255,0.88); }
+#panel-close { width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.07);border:none;color:rgba(255,255,255,0.5);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+.section-label { font-size:10px;font-weight:500;color:rgba(255,255,255,0.28);letter-spacing:1px;padding:18px 22px 8px; }
+.cur-pos-btn { margin:0 14px 4px;background:rgba(240,192,64,0.1);border:0.5px solid rgba(240,192,64,0.25);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:11px;cursor:pointer; }
+.cur-dot { width:10px;height:10px;border-radius:50%;background:#f0c040;box-shadow:0 0 0 3px rgba(240,192,64,0.2);flex-shrink:0; }
+.cur-label { font-size:14px;font-weight:500;color:#f0c040; }
+#memories-list { flex:1;overflow-y:auto;padding:0 14px;display:flex;flex-direction:column;gap:5px; }
+#memories-list::-webkit-scrollbar { display:none; }
+.mem-btn { border:none;border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:11px;cursor:pointer;width:100%;text-align:left; }
+.mem-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+.mem-info { flex:1; }
+.mem-name { font-size:13px;font-weight:500;color:rgba(255,255,255,0.88); }
+.mem-meta { font-size:10px;color:rgba(255,255,255,0.38);margin-top:2px; }
+.mem-km   { font-size:11px;color:rgba(255,255,255,0.4);font-weight:500; }
 
-        .controls h3 {
-            margin-bottom: 15px;
-            color: #4ecdc4;
-        }
-
-        .button-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        button {
-            padding: 10px 15px;
-            border: none;
-            border-radius: 5px;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 12px;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        button.active {
-            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
-        }
-
-        .status {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .status h3 {
-            color: #4ecdc4;
-            margin-bottom: 10px;
-        }
-
-        .time-display {
-            font-size: 18px;
-            font-weight: bold;
-            color: #fff;
-            text-align: center;
-            padding: 10px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-
-        .legend {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 10px;
-        }
-
-        .legend h3 {
-            color: #4ecdc4;
-            margin-bottom: 15px;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-            font-size: 12px;
-        }
-
-        .legend-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 3px;
-            margin-right: 10px;
-            opacity: 0.4;
-        }
-
-        #map {
-            height: 100vh;
-            width: 100%;
-        }
-
-        .instructions {
-            background: rgba(76, 175, 80, 0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            border-left: 4px solid #4caf50;
-        }
-
-        .instructions h3 {
-            color: #4caf50;
-            margin-bottom: 10px;
-        }
-
-        .instructions p {
-            font-size: 13px;
-            line-height: 1.4;
-            margin-bottom: 5px;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-            }
-            
-            .sidebar {
-                width: 100%;
-                height: auto;
-                max-height: 40vh;
-            }
-            
-            .main-content {
-                height: 60vh;
-            }
-            
-            #map {
-                height: 60vh;
-            }
-        }
-    </style>
+.player-marker { width:20px;height:20px;border-radius:50%;background:rgba(240,192,64,0.3);display:flex;align-items:center;justify-content:center;animation:pm 2s infinite; }
+@keyframes pm{0%,100%{transform:scale(1)}50%{transform:scale(1.6);opacity:0.6}}
+.player-inner { width:10px;height:10px;border-radius:50%;background:#f0c040; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="sidebar">
-            <h1>나의 대동여지도</h1>
-            
-            <div class="instructions">
-                <h3>🗺️ 사용 방법</h3>
-                <p>• 지도를 클릭하여 경로 시작점 설정</p>
-                <p>• 두 번째 클릭으로 경로 완성</p>
-                <p>• 시뮬레이션으로 시간 변화 확인</p>
-                <p>• 시간 가속으로 빠른 테스트 가능</p>
-            </div>
 
-            <div class="controls">
-                <h3>⏱️ 시뮬레이션 제어</h3>
-                <div class="button-group">
-                    <button onclick="toggleSimulation()">시뮬레이션 시작</button>
-                    <button onclick="addRandomRoute()">새 경로 추가</button>
-                    <button onclick="clearAllRoutes()">모든 경로 삭제</button>
-                </div>
-                
-                <div class="button-group">
-                    <button onclick="setTimeSpeed(1)" class="speed-btn active">1x</button>
-                    <button onclick="setTimeSpeed(10)" class="speed-btn">10x</button>
-                    <button onclick="setTimeSpeed(60)" class="speed-btn">60x</button>
-                    <button onclick="setTimeSpeed(600)" class="speed-btn">600x</button>
-                </div>
-            </div>
+<div id="map"></div>
+<canvas id="fog-canvas"></canvas>
 
-            <div class="status">
-                <h3>📊 시뮬레이션 상태</h3>
-                <div class="time-display" id="currentTime">2024-01-01 12:00:00</div>
-                <div>시간 가속: <span id="speedDisplay">1x</span></div>
-                <div>활성 경로: <span id="routeCount">0</span>개</div>
-                <div>상태: <span id="simulationStatus">정지</span></div>
-            </div>
+<div id="hud-top">
+  <button id="ham-btn" onclick="togglePanel()">
+    <div class="hline"></div><div class="hline"></div><div class="hline"></div>
+  </button>
+  <span id="app-title">나의 대동여지도</span>
+  <div id="rec-pill" class="recording" onclick="toggleRecord()">
+    <div id="rec-dot"></div>
+    <span id="rec-label">기록 중</span>
+  </div>
+</div>
 
-            <div class="legend">
-                <h3>🎨 경로 단계별 변화</h3>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #FFFFFF; border: 1px solid #666;"></div>
-                    <span>1단계: 흰색 (100%→40% opacity, 10시간)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #90EE90;"></div>
-                    <span>1단계 말기: 연두색 (40% opacity)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #32CD32;"></div>
-                    <span>2단계: 초록색 (40% opacity, 14시간)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #FFA500;"></div>
-                    <span>3단계: 주황색 (40% opacity, 7일)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #FF0000;"></div>
-                    <span>4단계: 빨간색 (40% opacity, 100일)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #8B4513;"></div>
-                    <span>5단계: 갈색 (40% opacity, 영구)</span>
-                </div>
-            </div>
-        </div>
+<div id="gps-toast">📡 GPS 신호 찾는 중...</div>
 
-        <div class="main-content">
-            <div id="map"></div>
-        </div>
-    </div>
-    <script>
-        // 전역 변수
-        let map;
-        let routes = [];
-        let simulationRunning = false;
-        let currentTime = new Date('2024-01-01T12:00:00');
-        let timeSpeed = 1;
-        let simulationInterval;
-        let clickPoints = [];
+<div id="hud-bottom">
+  <div class="stat-item">
+    <span class="stat-label">오늘 걸은 거리</span>
+    <span class="stat-value" id="stat-total">0.00<span>km</span></span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">새로운 길</span>
+    <span class="stat-value" id="stat-new">0.00<span>km</span></span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-label">기억</span>
+    <span class="stat-value" id="stat-count">0<span>개</span></span>
+  </div>
+</div>
 
-        // 지도 초기화
-        function initMap() {
-            try {
-                map = L.map('map').setView([37.5665, 126.9780], 11);
-                
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
-                }).addTo(map);
+<div id="layer-toggle">
+  <button class="layer-btn active" id="btn-fog" onclick="toggleFog()">🌫</button>
+  <button class="layer-btn" id="btn-loc" onclick="centerOnMe()">◎</button>
+</div>
 
-                // 지도 클릭 이벤트
-                map.on('click', function(e) {
-                    handleMapClick(e.latlng);
-                });
-                
-                // 지도 로딩 완료 이벤트
-                map.whenReady(function() {
-                    console.log('지도 초기화 및 로딩 완료');
-                });
-                
-            } catch (error) {
-                console.error('지도 초기화 실패:', error);
-            }
-        }
+<div id="panel">
+  <div class="panel-header">
+    <span class="panel-title">나의 대동여지도</span>
+    <button id="panel-close" onclick="togglePanel()">✕</button>
+  </div>
+  <div class="section-label">현재</div>
+  <div class="cur-pos-btn" onclick="centerOnMe();togglePanel()">
+    <div class="cur-dot"></div>
+    <span class="cur-label">현 위치로</span>
+  </div>
+  <div class="section-label">기억들</div>
+  <div id="memories-list"></div>
+</div>
 
-        // 지도 클릭 처리
-        function handleMapClick(latlng) {
-            clickPoints.push(latlng);
-            
-            // 임시 마커 표시
-            L.circleMarker(latlng, {
-                color: '#ff0000',
-                radius: 5
-            }).addTo(map);
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── 지도: grayscale + 어둡게 (CSS로 처리)
+// 걸은 곳만 fog canvas를 밝게 뚫어서 명암 표현
+const map = L.map('map', { zoomControl:false, attributionControl:false });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  maxZoom:19, subdomains:'abcd'
+}).addTo(map);
+map.setView([37.5340, 126.9950], 17);
 
-            if (clickPoints.length === 2) {
-                createRoute(clickPoints[0], clickPoints[1]);
-                clickPoints = [];
-                
-                // 임시 마커들 제거
-                map.eachLayer(function(layer) {
-                    if (layer instanceof L.CircleMarker) {
-                        map.removeLayer(layer);
-                    }
-                });
-            }
-        }
+// ── 안개 캔버스 ────────────────────────────────
+// 전략:
+// 1) 전체를 어두운 오버레이로 덮음
+// 2) 걸은 경로 각 점마다 radial gradient로 밝은 원을 그림
+//    → 중심 투명(밝음) → 가장자리 불투명(어두움)
+//    → 지도가 자연스럽게 밝게 드러남
+const fog  = document.getElementById('fog-canvas');
+const fctx = fog.getContext('2d');
+let fogEnabled = true;
 
-        // 경로 생성
-        function createRoute(start, end) {
-            const route = {
-                id: Date.now(),
-                coordinates: [start, end],
-                createdAt: new Date(currentTime),
-                polyline: null
-            };
+// 줌 레벨에 따른 glow 반경(픽셀) 계산
+// 실제 15m를 현재 줌의 픽셀로 변환
+function glowRadius() {
+  const zoom = map.getZoom();
+  // Leaflet: zoom 17 ≈ 1m ≈ 0.746px (위도 37° 기준)
+  const metersPerPx = 156543.03392 * Math.cos(37.53 * Math.PI / 180) / Math.pow(2, zoom);
+  return Math.max(18, 15 / metersPerPx); // 15m를 픽셀로
+}
 
-            const polyline = L.polyline([start, end], {
-                color: '#FFFFFF',
-                weight: 4,
-                opacity: 1.0
-            }).addTo(map);
+function resizeFog() {
+  fog.width  = window.innerWidth;
+  fog.height = window.innerHeight;
+  redrawFog();
+}
+window.addEventListener('resize', resizeFog);
+map.on('move zoom moveend zoomend', redrawFog);
 
-            route.polyline = polyline;
-            routes.push(route);
-            updateRouteCount();
-        }
+function redrawFog() {
+  const W = fog.width, H = fog.height;
+  fctx.clearRect(0, 0, W, H);
+  if (!fogEnabled) return;
 
-        // 랜덤 경로 추가
-        function addRandomRoute() {
-            if (!map) {
-                console.error('지도가 초기화되지 않았습니다.');
-                return;
-            }
-            
-            if (!map.getCenter) {
-                console.error('지도 메서드를 사용할 수 없습니다.');
-                return;
-            }
-            
-            try {
-                const center = map.getCenter();
-                
-                const start = L.latLng(
-                    center.lat + (Math.random() - 0.5) * 0.02,
-                    center.lng + (Math.random() - 0.5) * 0.02
-                );
-                
-                const end = L.latLng(
-                    center.lat + (Math.random() - 0.5) * 0.02,
-                    center.lng + (Math.random() - 0.5) * 0.02
-                );
+  // 1) 어두운 오버레이 전체 덮기
+  fctx.fillStyle = 'rgba(0,0,0,0.82)';
+  fctx.fillRect(0, 0, W, H);
 
-                createRoute(start, end);
-                console.log('랜덤 경로 추가 완료');
-            } catch (error) {
-                console.error('랜덤 경로 추가 실패:', error);
-            }
-        }
+  // 2) destination-out + radial gradient로 걸은 곳만 밝히기
+  fctx.save();
+  fctx.globalCompositeOperation = 'destination-out';
 
-        // 시간에 따른 경로 상태 계산
-        function getRouteState(ageInMinutes) {
-            if (ageInMinutes < 600) {
-                // 1단계: 흰색, opacity 감소 후 연두색으로 변경
-                const opacity = Math.max(0.4, 1.0 - (ageInMinutes / 600) * 0.6);
-                if (opacity <= 0.4) {
-                    return {
-                        color: '#90EE90',
-                        opacity: 0.4,
-                        stage: `1단계 (연두색)`,
-                        description: '40% opacity'
-                    };
-                }
-                return {
-                    color: '#FFFFFF',
-                    opacity: opacity,
-                    stage: `1단계 (흰색)`,
-                    description: `${Math.round(opacity * 100)}% opacity`
-                };
-            } else if (ageInMinutes < 1440) {
-                // 2단계: 초록색, 40% opacity
-                return {
-                    color: '#32CD32',
-                    opacity: 0.4,
-                    stage: `2단계 (초록색)`,
-                    description: '40% opacity'
-                };
-            } else if (ageInMinutes < 10080) {
-                // 3단계: 주황색, 40% opacity (7일)
-                return {
-                    color: '#FFA500',
-                    opacity: 0.4,
-                    stage: `3단계 (주황색)`,
-                    description: '40% opacity'
-                };
-            } else if (ageInMinutes < 144000) {
-                // 4단계: 빨간색, 40% opacity (100일)
-                return {
-                    color: '#FF0000',
-                    opacity: 0.4,
-                    stage: `4단계 (빨간색)`,
-                    description: '40% opacity'
-                };
-            } else {
-                // 5단계: 갈색, 40% opacity (영구)
-                return {
-                    color: '#8B4513',
-                    opacity: 0.4,
-                    stage: `5단계 (갈색)`,
-                    description: '40% opacity'
-                };
-            }
-        }
+  const r = glowRadius();
 
-        // 경로 업데이트
-        function updateRoutes() {
-            routes.forEach(route => {
-                const ageInMinutes = (currentTime - route.createdAt) / (1000 * 60);
-                const state = getRouteState(ageInMinutes);
-                
-                if (route.polyline) {
-                    route.polyline.setStyle({
-                        color: state.color,
-                        opacity: state.opacity
-                    });
-                }
-            });
-        }
+  // 오래된 기억 → 희미하게 (alpha 0.22)
+  memories.slice(5).forEach(m  => glowPath(m.latlngs, r * 0.8, 0.22));
+  // 최근 기억   → 중간 (alpha 0.45)
+  memories.slice(0,5).forEach(m => glowPath(m.latlngs, r * 0.9, 0.45));
+  // 오늘 경로   → 선명하게 (alpha 1.0)
+  if (todayLatlngs.length > 0)   glowPath(todayLatlngs, r, 1.0);
 
-        // 시뮬레이션 토글
-        function toggleSimulation() {
-            if (simulationRunning) {
-                stopSimulation();
-            } else {
-                startSimulation();
-            }
-        }
+  fctx.restore();
+}
 
-        // 시뮬레이션 시작
-        function startSimulation() {
-            simulationRunning = true;
-            simulationInterval = setInterval(() => {
-                currentTime = new Date(currentTime.getTime() + (1000 * 60 * timeSpeed));
-                updateRoutes();
-                updateTimeDisplay();
-            }, 1000);
-            
-            document.getElementById('simulationStatus').textContent = '실행중';
-            event.target.textContent = '시뮬레이션 정지';
-        }
+// 경로 각 점마다 radial gradient(glow) 그리기
+function glowPath(latlngs, radius, maxAlpha) {
+  if (latlngs.length === 0) return;
+  latlngs.forEach(ll => {
+    const p = map.latLngToContainerPoint(ll);
+    const grad = fctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+    // 중심: 완전 투명하게 뚫림 (지도 원색 드러남)
+    grad.addColorStop(0,   `rgba(0,0,0,${maxAlpha})`);
+    // 중간: 부드럽게 페이드
+    grad.addColorStop(0.5, `rgba(0,0,0,${maxAlpha * 0.6})`);
+    // 가장자리: 완전 어두움 유지
+    grad.addColorStop(1,   'rgba(0,0,0,0)');
+    fctx.fillStyle = grad;
+    fctx.beginPath();
+    fctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    fctx.fill();
+  });
+}
 
-        // 시뮬레이션 정지
-        function stopSimulation() {
-            simulationRunning = false;
-            if (simulationInterval) {
-                clearInterval(simulationInterval);
-            }
-            
-            document.getElementById('simulationStatus').textContent = '정지';
-            document.querySelector('button[onclick="toggleSimulation()"]').textContent = '시뮬레이션 시작';
-        }
+// ── 상태 ──────────────────────────────────────
+let recording     = true;
+let currentLatLng = null;
+let playerMarker  = null;
+let accCircle     = null;
+let todayLatlngs  = [];
+let memories      = [];
+let totalDist     = 0;
+let newDist       = 0;
+const COLORS = ['#6b9ef5','#52c4a0','#c478e0','#e06b8d','#e8a44a','#4dc8e8'];
 
-        // 시간 가속 설정
-        function setTimeSpeed(speed) {
-            timeSpeed = speed;
-            document.getElementById('speedDisplay').textContent = speed + 'x';
-            
-            // 버튼 스타일 업데이트
-            document.querySelectorAll('.speed-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-        }
+function setPlayerMarker(ll) {
+  if (!playerMarker) {
+    const el = document.createElement('div');
+    el.className = 'player-marker';
+    el.innerHTML = '<div class="player-inner"></div>';
+    const icon = L.divIcon({ html:el, className:'', iconSize:[20,20], iconAnchor:[10,10] });
+    playerMarker = L.marker(ll, { icon, zIndexOffset:1000 }).addTo(map);
+  } else {
+    playerMarker.setLatLng(ll);
+  }
+}
 
-        // 모든 경로 삭제
-        function clearAllRoutes() {
-            routes.forEach(route => {
-                if (route.polyline) {
-                    map.removeLayer(route.polyline);
-                }
-            });
-            routes = [];
-            updateRouteCount();
-        }
+function haversine(a, b) {
+  const R=6371000, φ1=a.lat*Math.PI/180, φ2=b.lat*Math.PI/180;
+  const Δφ=(b.lat-a.lat)*Math.PI/180, Δλ=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
 
-        // 시간 표시 업데이트
-        function updateTimeDisplay() {
-            const timeString = currentTime.toLocaleString('ko-KR', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            document.getElementById('currentTime').textContent = timeString;
-        }
+function handlePosition(ll) {
+  if (!currentLatLng) map.setView(ll, 17);
+  setPlayerMarker(ll);
+  if (recording) {
+    if (currentLatLng) {
+      const d = haversine(currentLatLng, ll);
+      if (d > 2) {
+        totalDist += d;
+        newDist   += d * 0.65;
+        todayLatlngs.push(ll);
+        updateStats();
+        redrawFog();
+      }
+    } else {
+      todayLatlngs.push(ll);
+      redrawFog();
+    }
+  }
+  currentLatLng = ll;
+}
 
-        // 경로 개수 업데이트
-        function updateRouteCount() {
-            document.getElementById('routeCount').textContent = routes.length;
-        }
+function startGPS() {
+  if (!navigator.geolocation) { startSim(); return; }
+  showToast('📡 GPS 신호 찾는 중...');
+  navigator.geolocation.watchPosition(
+    pos => {
+      hideToast();
+      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      if (accCircle) accCircle.setLatLng(ll).setRadius(pos.coords.accuracy);
+      else accCircle = L.circle(ll, {
+        radius: pos.coords.accuracy,
+        color:'rgba(240,192,64,0.4)', fillColor:'rgba(240,192,64,0.06)',
+        fillOpacity:1, weight:1
+      }).addTo(map);
+      handlePosition(ll);
+    },
+    () => { showToast('⚠️ GPS 사용 불가 → 시뮬레이션 모드'); setTimeout(startSim, 1200); },
+    { enableHighAccuracy:true, maximumAge:3000, timeout:15000 }
+  );
+}
 
-        // 초기화 - Leaflet 라이브러리 로딩 완료 후 실행
-        function initialize() {
-            if (typeof L === 'undefined') {
-                // Leaflet이 아직 로드되지 않았으면 잠시 후 다시 시도
-                setTimeout(initialize, 100);
-                return;
-            }
-            
-            initMap();
-            updateTimeDisplay();
-            updateRouteCount();
-            
-            // 자동 경로 추가 제거 - 사용자가 수동으로 추가하도록 변경
-            // setTimeout(() => {
-            //     if (map && map.getCenter) {
-            //         addRandomRoute();
-            //         addRandomRoute();  
-            //         addRandomRoute();
-            //     }
-            // }, 2000);
-        }
+function startSim() {
+  hideToast();
+  showToast('🚶 시뮬레이션 모드 (실제 폰에서는 GPS 자동 사용)');
+  setTimeout(hideToast, 3500);
 
-        // DOM과 Leaflet 라이브러리가 모두 로드된 후 초기화
-        document.addEventListener('DOMContentLoaded', function() {
-            initialize();
-        });
-    </script>
+  const route = [
+    [37.53400,126.99500],[37.53410,126.99512],[37.53422,126.99530],
+    [37.53435,126.99518],[37.53448,126.99505],[37.53460,126.99520],
+    [37.53472,126.99538],[37.53480,126.99555],[37.53488,126.99540],
+    [37.53495,126.99522],[37.53505,126.99510],[37.53515,126.99525],
+    [37.53525,126.99542],[37.53535,126.99558],[37.53542,126.99545],
+    [37.53550,126.99530],[37.53560,126.99515],[37.53572,126.99528],
+    [37.53582,126.99545],[37.53590,126.99562],[37.53598,126.99548],
+    [37.53606,126.99532],[37.53616,126.99518],[37.53628,126.99530],
+    [37.53638,126.99548],[37.53645,126.99565],[37.53652,126.99550],
+    [37.53660,126.99535],[37.53670,126.99520],[37.53682,126.99533],
+  ];
+
+  let i = 0;
+  function step() {
+    if (!recording) { setTimeout(step, 800); return; }
+    if (i < route.length) {
+      handlePosition(L.latLng(route[i][0], route[i][1]));
+      i++;
+      setTimeout(step, 500);
+    } else {
+      if (todayLatlngs.length > 3) { saveMemory(); todayLatlngs = []; }
+      i = 0; currentLatLng = null;
+      setTimeout(step, 1200);
+    }
+  }
+  step();
+}
+
+function toggleRecord() {
+  recording = !recording;
+  document.getElementById('rec-label').textContent = recording ? '기록 중' : '기록 시작';
+  document.getElementById('rec-pill').className    = recording ? 'recording' : 'idle';
+  if (!recording && todayLatlngs.length > 2) { saveMemory(); todayLatlngs = []; }
+}
+
+function saveMemory() {
+  const now = new Date();
+  memories.unshift({
+    color:   COLORS[memories.length % COLORS.length],
+    name:    '기억 ' + (memories.length + 1),
+    time:    now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0'),
+    km:      (totalDist / 1000).toFixed(2),
+    latlngs: [...todayLatlngs],
+  });
+  renderMemories();
+  updateStats();
+}
+
+function renderMemories() {
+  const list = document.getElementById('memories-list');
+  list.innerHTML = '';
+  memories.slice(0,5).forEach(mem => {
+    const d = document.createElement('div');
+    d.className = 'mem-btn';
+    d.style.background = hexA(mem.color, .13);
+    d.style.border     = '0.5px solid ' + hexA(mem.color, .28);
+    d.innerHTML = `
+      <div class="mem-dot" style="background:${mem.color};box-shadow:0 0 0 3px ${hexA(mem.color,.2)}"></div>
+      <div class="mem-info">
+        <div class="mem-name">${mem.name}</div>
+        <div class="mem-meta">${mem.time}</div>
+      </div>
+      <div class="mem-km">${mem.km}km</div>`;
+    d.onclick = () => {
+      if (mem.latlngs.length) map.setView(mem.latlngs[mem.latlngs.length-1], 17);
+      togglePanel();
+    };
+    list.appendChild(d);
+  });
+}
+
+function hexA(h, a) {
+  const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function updateStats() {
+  document.getElementById('stat-total').innerHTML = (totalDist/1000).toFixed(2)+'<span>km</span>';
+  document.getElementById('stat-new').innerHTML   = (newDist/1000).toFixed(2)  +'<span>km</span>';
+  document.getElementById('stat-count').innerHTML = memories.length             +'<span>개</span>';
+}
+
+function togglePanel() { document.getElementById('panel').classList.toggle('open'); }
+function centerOnMe()  { if (currentLatLng) map.setView(currentLatLng, 17); }
+function toggleFog() {
+  fogEnabled = !fogEnabled;
+  document.getElementById('btn-fog').classList.toggle('active', fogEnabled);
+  redrawFog();
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('gps-toast');
+  t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(toastTimer);
+}
+function hideToast() {
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => document.getElementById('gps-toast').classList.add('hidden'), 300);
+}
+
+resizeFog();
+startGPS();
+</script>
 </body>
 </html>
