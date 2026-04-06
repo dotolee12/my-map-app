@@ -1,4 +1,4 @@
-const CACHE_NAME = 'giloa-cache-v3';
+const CACHE_NAME = 'giloa-cache-v4';
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
