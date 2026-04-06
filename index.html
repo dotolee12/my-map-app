@@ -338,11 +338,12 @@
 <script>
 if ('serviceWorker' in navigator) {
 window.addEventListener('load', () => {
-navigator.serviceWorker.register('./service-worker.js')
+navigator.serviceWorker.register('./sw.js')
 .then(() => console.log('SW 등록 완료'))
 .catch(e => console.warn('SW 등록 실패', e));
 });
 }
+</script>
 </script>
 </body>
 </html>
