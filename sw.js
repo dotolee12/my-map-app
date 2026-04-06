@@ -1,4 +1,4 @@
-const CACHE_NAME = 'giloa-cache-v2';
+const CACHE_NAME = 'giloa-cache-v3';
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
@@ -11,7 +11,10 @@ self.addEventListener('install', function(e) {
         './manifest.json',
         './sw.js',
         'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-        'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+        'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+        'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js',
+        'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css',
+        'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css'
       ]);
     })
   );
