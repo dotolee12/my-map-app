@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -9,6 +9,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -77,9 +79,7 @@
 <input type="text" id="gpx-export-name" class="gpx-name-input" placeholder="발걸음 이름 (예: 한강 산책)">
 </div>
 <button class="gpx-action-btn export" onclick="exportGpx()">🦶 이 발걸음 저장하기</button>
-
 <div class="sidebar-divider" style="margin-top:18px;"></div>
-
 <div class="gpx-section-label">📥 저장된 발걸음 열기</div>
 <div id="gpx-saved-list">
 <p class="empty-message">저장된 발걸음이 없습니다.</p>
@@ -111,30 +111,41 @@
 <div class="icon-rec"></div>
 <div class="icon-stop"></div>
 </div>
-<div id="photo-btn" class="btn" onclick="document.getElementById('camera-input').click()" title="사진 올리기">🖼</div>
+<div id="photo-btn" class="btn" onclick="togglePhotoMenu()">🖼</div>
 <div id="memo-btn" class="btn" onclick="addMemory()">★</div>
 <div id="loc-btn" class="btn" onclick="centerMap()">
 <div class="icon-loc"></div>
 </div>
 </div>
 
-<input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
+<!-- 사진 메뉴 팝업 -->
+<div id="photo-menu" class="photo-menu">
+<div class="photo-menu-item" onclick="triggerCamera()">
+<span class="photo-menu-icon">📷</span>
+<span class="photo-menu-label">지금 찍기</span>
+</div>
+<div class="photo-menu-item" onclick="triggerGallery()">
+<span class="photo-menu-icon">🖼</span>
+<span class="photo-menu-label">갤러리에서 불러오기</span>
+</div>
+</div>
+<div id="photo-menu-overlay" onclick="closePhotoMenu()"></div>
+
+<input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotos(event)">
+<input type="file" id="gallery-input" accept="image/*" multiple style="display:none" onchange="handlePhotos(event)">
 
 <div id="help-btn" class="btn" onclick="toggleHelp()">?</div>
 
 <div id="help-popup" onclick="handleHelpOverlayClick(event)">
 <div class="help-content" id="help-content-box">
-
 <div class="help-tab-row">
 <div class="help-tab active" id="htab-ask" onclick="switchHelpTab('ask')">? 문의하기</div>
 <div class="help-tab" id="htab-info" onclick="switchHelpTab('info')">! 설명하기</div>
 <span onclick="toggleHelp()" class="help-close">✕</span>
 </div>
-
 <div id="hpanel-ask" class="help-panel">
 <p style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.7;margin-bottom:14px;">
-사용 중 불편한 점이나 건의사항을<br>
-카카오톡 오픈채팅으로 알려주세요!
+사용 중 불편한 점이나 건의사항을<br>카카오톡 오픈채팅으로 알려주세요!
 </p>
 <div class="help-notice">
 🔒 이 앱은 GPX 데이터를 외부 서버로 전송하지 않아요.<br>
@@ -144,36 +155,23 @@
 💬 카카오톡 오픈채팅 문의
 </a>
 </div>
-
 <div id="hpanel-info" class="help-panel" style="display:none;">
 <div class="help-guide-list">
 <div class="help-guide-item">
 <div class="help-guide-icon red-dot"></div>
-<div class="help-guide-text">
-<b>녹화 버튼</b><br>
-<span>누르면 GPS 경로 기록 시작. 다시 누르면 중지. 걷는 길이 지도에 새겨져요.</span>
-</div>
+<div class="help-guide-text"><b>녹화 버튼</b><br><span>누르면 GPS 경로 기록 시작. 다시 누르면 중지.</span></div>
 </div>
 <div class="help-guide-item">
 <div class="help-guide-icon photo-icon">🖼</div>
-<div class="help-guide-text">
-<b>사진 버튼</b><br>
-<span>현재 위치에 사진을 찍어 지도에 고정해요. 나중에 탭하면 확인 가능해요.</span>
-</div>
+<div class="help-guide-text"><b>사진 버튼</b><br><span>지금 찍기 또는 갤러리에서 여러 장 불러오기.</span></div>
 </div>
 <div class="help-guide-item">
 <div class="help-guide-icon star-icon">★</div>
-<div class="help-guide-text">
-<b>마킹 버튼</b><br>
-<span>현재 위치에 이름을 붙여 기억으로 저장해요. 나중에 다시 찾아볼 수 있어요.</span>
-</div>
+<div class="help-guide-text"><b>마킹 버튼</b><br><span>현재 위치에 이름을 붙여 기억으로 저장해요.</span></div>
 </div>
 <div class="help-guide-item">
 <div class="help-guide-icon blue-dot"></div>
-<div class="help-guide-text">
-<b>현재 위치 버튼</b><br>
-<span>지도를 내 현재 위치로 이동시켜요.</span>
-</div>
+<div class="help-guide-text"><b>현재 위치 버튼</b><br><span>지도를 내 현재 위치로 이동시켜요.</span></div>
 </div>
 <div class="help-guide-item">
 <div class="help-guide-icon person-icon">
@@ -182,100 +180,14 @@
 <path d="M3.5 23c0-5.247 4.253-8.5 9.5-8.5s9.5 3.253 9.5 8.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
 </svg>
 </div>
-<div class="help-guide-text">
-<b>내 상태 버튼 (하단 중앙)</b><br>
-<span>누르면 칭호·레벨·다음 단계까지 진행도를 확인할 수 있어요.</span>
-</div>
+<div class="help-guide-text"><b>내 상태 버튼 (하단 중앙)</b><br><span>칭호·레벨·진행도를 확인할 수 있어요.</span></div>
 </div>
 <div class="help-guide-item">
 <div class="help-guide-icon menu-icon">☰</div>
-<div class="help-guide-text">
-<b>메뉴 버튼 (상단 왼쪽)</b><br>
-<span>기억·사진·발걸음 목록을 보고, 안개 효과를 켜고 끌 수 있어요.</span>
+<div class="help-guide-text"><b>메뉴 버튼 (상단 왼쪽)</b><br><span>기억·사진·발걸음 목록을 볼 수 있어요.</span></div>
 </div>
 </div>
 </div>
-
-<div style="height:1px;background:rgba(255,255,255,0.08);margin:16px 0;"></div>
-<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:0.06em;margin-bottom:12px;">길의 상태</div>
-
-<div class="help-guide-list">
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.2);">
-<div style="width:18px;height:3px;background:#fff;border-radius:2px;"></div>
-</div>
-<div class="help-guide-text">
-<b>밝은 흰 길</b><br>
-<span>최근 24시간 안에 걸은 길이에요. 가장 선명하게 보여요.</span>
-</div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1);">
-<div style="width:18px;height:3px;background:rgba(255,255,255,0.4);border-radius:2px;"></div>
-</div>
-<div class="help-guide-text">
-<b>흐린 흰 길</b><br>
-<span>24시간이 지난 길이에요. 시간이 지날수록 점점 흐려져요.</span>
-</div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(173,255,120,0.15);border-color:rgba(173,255,120,0.3);">
-<div style="width:18px;height:3px;background:rgba(173,255,120,0.9);border-radius:2px;"></div>
-</div>
-<div class="help-guide-text">
-<b>초록빛 길</b><br>
-<span>3일~1개월 사이에 걸은 길이에요.</span>
-</div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(60,170,80,0.15);border-color:rgba(60,170,80,0.3);">
-<div style="width:18px;height:3px;background:rgba(60,170,80,0.9);border-radius:2px;"></div>
-</div>
-<div class="help-guide-text">
-<b>짙은 초록 길</b><br>
-<span>1~3개월 사이에 걸은 길이에요.</span>
-</div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(214,176,55,0.15);border-color:rgba(214,176,55,0.3);">
-<div style="width:18px;height:3px;background:rgba(214,176,55,0.9);border-radius:2px;"></div>
-</div>
-<div class="help-guide-text">
-<b>황금빛 길</b><br>
-<span>3~6개월 사이에 걸은 길이에요.</span>
-</div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(130,92,55,0.15);border-color:rgba(130,92,55,0.3);">
-<div style="width:18px;height:3px;background:rgba(130,92,55,0.9);border-radius:2px;"></div>
-</div>
-<div class="help-guide-text">
-<b>갈색 길</b><br>
-<span>6개월~1년 사이에 걸은 길이에요.</span>
-</div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(126,112,96,0.2);border-color:rgba(126,112,96,0.35);">
-<div style="width:18px;height:3px;background:rgba(126,112,96,0.9);border-radius:2px;"></div>
-</div>
-<div class="help-guide-text">
-<b>퇴적된 길</b><br>
-<span>1년 이상 된 길이에요. 오래된 기억처럼 침전돼요.</span>
-</div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon" style="background:rgba(255,220,100,0.15);border-color:rgba(255,220,100,0.3);">
-<div style="width:12px;height:12px;border-radius:50%;background:rgba(255,220,100,0.8);"></div>
-</div>
-<div class="help-guide-text">
-<b>노란 빛 원</b><br>
-<span>10분 이상 머문 장소예요. 오래 머물수록 원이 커져요.</span>
-</div>
-</div>
-</div>
-
-</div>
-
 </div>
 </div>
 
@@ -287,7 +199,6 @@
 </svg>
 </div>
 <div id="hud-basic">
-
 <div id="hud-title-row">
 <div id="hud-title-wrap">
 <div id="hud-title-label">현재 칭호</div>
@@ -298,42 +209,31 @@
 <div id="hud-level-num">1</div>
 </div>
 </div>
-
 <div id="hud-progress-row">
-
 <div class="hud-prog-item">
 <div class="hud-prog-label">이동 거리</div>
 <div class="hud-prog-current" id="prog-dist-cur">0.00 km</div>
-<div class="hud-prog-bar-wrap">
-<div class="hud-prog-bar" id="prog-dist-bar" style="width:0%;background:#4db8ff;"></div>
+<div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-dist-bar" style="width:0%;background:#4db8ff;"></div></div>
+<div class="hud-prog-next" id="prog-dist-next">다음까지 —</div>
 </div>
-<div class="hud-prog-next" id="prog-dist-next">다음까지 -</div>
-</div>
-
 <div class="hud-prog-item">
 <div class="hud-prog-label">기억 저장</div>
 <div class="hud-prog-current" id="prog-mem-cur">0 개</div>
-<div class="hud-prog-bar-wrap">
-<div class="hud-prog-bar" id="prog-mem-bar" style="width:0%;background:#ffd84d;"></div>
+<div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-mem-bar" style="width:0%;background:#ffd84d;"></div></div>
+<div class="hud-prog-next" id="prog-mem-next">다음까지 —</div>
 </div>
-<div class="hud-prog-next" id="prog-mem-next">다음까지 -</div>
-</div>
-
 <div class="hud-prog-item">
 <div class="hud-prog-label">사진 저장</div>
 <div class="hud-prog-current" id="prog-photo-cur">0 개</div>
-<div class="hud-prog-bar-wrap">
-<div class="hud-prog-bar" id="prog-photo-bar" style="width:0%;background:#a78bfa;"></div>
+<div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-photo-bar" style="width:0%;background:#a78bfa;"></div></div>
+<div class="hud-prog-next" id="prog-photo-next">다음까지 —</div>
 </div>
-<div class="hud-prog-next" id="prog-photo-next">다음까지 -</div>
 </div>
-
-</div>
-
 </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="./script.js"></script>
 <script>
 if ('serviceWorker' in navigator) {

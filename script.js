@@ -1,4 +1,4 @@
-﻿const STORAGE_KEY        = "giloa-v7";
+const STORAGE_KEY        = "giloa-v7";
 const FOG_ENABLED_KEY    = "giloa-fog-enabled";
 const GPX_SAVES_KEY      = "giloa-gpx-saves";
 const FOG_ALPHA          = 0.8;
@@ -23,19 +23,24 @@ const SIX_MONTHS_DAYS      = 180;
 const ONE_YEAR_DAYS        = 365;
 const SEDIMENT_LAYER_COLOR = "rgba(126, 112, 96, 0.24)";
 
+const CLUSTER_ZOOM_THRESHOLD = 14;
+const MARKER_MAX_SIZE = 40;
+const MARKER_MIN_SIZE = 20;
+const MARKER_MAX_ZOOM = 17;
+const MARKER_MIN_ZOOM = 14;
+
 const LEVEL_TABLE = [
-    { level: 1, title: "길 없는 자",          distKm: 0,   memories: 0,  photos: 0  },
-    { level: 2, title: "흔적을 남긴 자",      distKm: 1,   memories: 0,  photos: 0  },
-    { level: 3, title: "탐험자",              distKm: 10,  memories: 1,  photos: 0  },
-    { level: 4, title: "길을 만든 자",        distKm: 30,  memories: 3,  photos: 0  },
-    { level: 5, title: "기억을 수집하는 자",  distKm: 50,  memories: 5,  photos: 3  },
-    { level: 6, title: "개척자",              distKm: 100, memories: 10, photos: 7  },
-    { level: 7, title: "세계의 기록자",       distKm: 200, memories: 20, photos: 15 },
+{ level: 1, title: "길 없는 자",          distKm: 0,   memories: 0,  photos: 0  },
+{ level: 2, title: "흔적을 남긴 자",      distKm: 1,   memories: 0,  photos: 0  },
+{ level: 3, title: "탐험자",              distKm: 10,  memories: 1,  photos: 0  },
+{ level: 4, title: "길을 만든 자",        distKm: 30,  memories: 3,  photos: 0  },
+{ level: 5, title: "기억을 수집하는 자",  distKm: 50,  memories: 5,  photos: 3  },
+{ level: 6, title: "개척자",              distKm: 100, memories: 10, photos: 7  },
+{ level: 7, title: "세계의 기록자",       distKm: 200, memories: 20, photos: 15 },
 ];
 
 let isRecording     = false;
 let photos          = [];
-const photoMarkers  = new Map();
 let isFogEnabled    = true;
 let isHudExpanded   = false;
 let currentPos      = null;
@@ -60,17 +65,23 @@ const map = L.map("map", { zoomControl: false, attributionControl: false })
 
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
 
-map.createPane("fogPane");
-map.getPane("fogPane").style.zIndex = 350;
-
-map.createPane("agePane");
-map.getPane("agePane").style.zIndex = 351;
-
-map.createPane("stayPane");
-map.getPane("stayPane").style.zIndex = 352;
-
 map.createPane("memoryPane");
 map.getPane("memoryPane").style.zIndex = 500;
+
+// ── 사진 클러스터 그룹 ──────────────────────────────
+const photoClusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 60,
+    disableClusteringAtZoom: CLUSTER_ZOOM_THRESHOLD + 1,
+    iconCreateFunction: function(cluster) {
+        const count = cluster.getChildCount();
+        return L.divIcon({
+            className: "photo-cluster-icon",
+            html: `<div class="photo-cluster-inner">${count}</div>`,
+            iconSize: [36, 36]
+        });
+    }
+});
+map.addLayer(photoClusterGroup);
 
 const fogCanvas  = document.getElementById("fog-canvas");
 const ageCanvas  = document.getElementById("age-canvas");
@@ -78,12 +89,6 @@ const stayCanvas = document.getElementById("stay-canvas");
 const fogCtx     = fogCanvas.getContext("2d");
 const ageCtx     = ageCanvas.getContext("2d");
 const stayCtx    = stayCanvas.getContext("2d");
-
-function attachCanvasLayers() {
-    map.getPane("fogPane").appendChild(fogCanvas);
-    map.getPane("agePane").appendChild(ageCanvas);
-    map.getPane("stayPane").appendChild(stayCanvas);
-}
 
 function resizeCanvas() {
     const w = window.innerWidth  + 2;
@@ -101,6 +106,7 @@ function resizeCanvas() {
 
 window.addEventListener("resize", resizeCanvas);
 map.on("move zoom", scheduleRender);
+map.on("zoomend", updatePhotoMarkerSizes);
 
 function scheduleRender() {
     if (rafId !== null) return;
@@ -122,52 +128,43 @@ function renderFog() {
     const w = fogCanvas.width, h = fogCanvas.height;
     fogCtx.clearRect(0, 0, w, h);
     if (!isFogEnabled) return;
-
     fogCtx.fillStyle = `rgba(8, 10, 18, ${FOG_ALPHA})`;
     fogCtx.fillRect(0, 0, w, h);
     if (pathCoordinates.length === 0) return;
-
     const now    = Date.now();
     const mpp    = calcMpp();
     const radius = metersToPixels(FOG_RADIUS_M, mpp);
-
-    // 오프스크린에 경로 마스크 생성
     const offscreen = document.createElement("canvas");
     offscreen.width  = w;
     offscreen.height = h;
     const offCtx = offscreen.getContext("2d");
-
-    // 오프스크린은 완전 투명으로 시작
     offCtx.clearRect(0, 0, w, h);
-
     if (pathCoordinates.length === 1) {
-        const point    = pathCoordinates[0];
-        const ageHours = (now - point.startTime) / 3600000;
-        const alpha    = getPathVisibility(ageHours);
-        const stayMin  = (point.endTime - point.startTime) / 60000;
+        const point      = pathCoordinates[0];
+        const ageHours   = (now - point.startTime) / 3600000;
+        const alpha      = getPathVisibility(ageHours);
+        const stayMin    = (point.endTime - point.startTime) / 60000;
         const stayRadius = metersToPixels(getStayRadiusMeters(stayMin), mpp);
-        const pos = map.latLngToContainerPoint([point.lat, point.lng]);
+        const pos        = map.latLngToContainerPoint([point.lat, point.lng]);
         offCtx.fillStyle = `rgba(0,0,0,${alpha})`;
         offCtx.beginPath();
         offCtx.arc(pos.x, pos.y, stayRadius, 0, Math.PI * 2);
         offCtx.fill();
     } else {
         for (let i = 1; i < pathCoordinates.length; i++) {
-            const point    = pathCoordinates[i];
-            const ageHours = (now - point.startTime) / 3600000;
-            const alpha    = getPathVisibility(ageHours);
-            const stayMin  = (point.endTime - point.startTime) / 60000;
+            const point      = pathCoordinates[i];
+            const ageHours   = (now - point.startTime) / 3600000;
+            const alpha      = getPathVisibility(ageHours);
+            const stayMin    = (point.endTime - point.startTime) / 60000;
             const stayRadius = metersToPixels(getStayRadiusMeters(stayMin), mpp);
-            const prev = map.latLngToContainerPoint([pathCoordinates[i-1].lat, pathCoordinates[i-1].lng]);
-            const pos  = map.latLngToContainerPoint([point.lat, point.lng]);
-
+            const prev       = map.latLngToContainerPoint([pathCoordinates[i-1].lat, pathCoordinates[i-1].lng]);
+            const pos        = map.latLngToContainerPoint([point.lat, point.lng]);
             if (stayMin >= 10) {
                 offCtx.fillStyle = `rgba(0,0,0,${alpha})`;
                 offCtx.beginPath();
                 offCtx.arc(pos.x, pos.y, stayRadius, 0, Math.PI * 2);
                 offCtx.fill();
             }
-
             offCtx.strokeStyle = `rgba(0,0,0,${alpha})`;
             offCtx.lineWidth   = radius * 2;
             offCtx.lineCap     = "round";
@@ -178,8 +175,6 @@ function renderFog() {
             offCtx.stroke();
         }
     }
-
-    // 오프스크린을 fog에 한 번에 뚫기
     fogCtx.save();
     fogCtx.globalCompositeOperation = "destination-out";
     fogCtx.drawImage(offscreen, 0, 0);
@@ -199,48 +194,19 @@ function renderAgeTint() {
     const now    = Date.now();
     const mpp    = calcMpp();
     const radius = metersToPixels(FOG_RADIUS_M, mpp);
-    const bucketMasks = new Map();
-
-    function getBucketCtx(color) {
-        if (bucketMasks.has(color)) return bucketMasks.get(color);
-        const offscreen = document.createElement("canvas");
-        offscreen.width = w;
-        offscreen.height = h;
-        const ctx = offscreen.getContext("2d");
-        ctx.fillStyle = "#000";
-        ctx.strokeStyle = "#000";
-        bucketMasks.set(color, ctx);
-        return ctx;
-    }
-
     pathCoordinates.forEach((point, i) => {
         const ageDays = (now - point.startTime) / 86400000;
         const color   = getAgeColor(ageDays);
         if (!color) return;
-        const bucketCtx = getBucketCtx(color);
         const pos = map.latLngToContainerPoint([point.lat, point.lng]);
-        bucketCtx.beginPath();
-        bucketCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-        bucketCtx.fill();
+        ageCtx.fillStyle = color; ageCtx.strokeStyle = color;
+        ageCtx.beginPath(); ageCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2); ageCtx.fill();
         if (i > 0) {
             const prev = map.latLngToContainerPoint([pathCoordinates[i-1].lat, pathCoordinates[i-1].lng]);
-            bucketCtx.beginPath();
-            bucketCtx.lineWidth = radius * 1.15;
-            bucketCtx.lineCap = "round";
-            bucketCtx.lineJoin = "round";
-            bucketCtx.moveTo(prev.x, prev.y);
-            bucketCtx.lineTo(pos.x, pos.y);
-            bucketCtx.stroke();
+            ageCtx.beginPath();
+            ageCtx.lineWidth = radius * 1.15; ageCtx.lineCap = "round"; ageCtx.lineJoin = "round";
+            ageCtx.moveTo(prev.x, prev.y); ageCtx.lineTo(pos.x, pos.y); ageCtx.stroke();
         }
-    });
-
-    bucketMasks.forEach((bucketCtx, color) => {
-        ageCtx.save();
-        ageCtx.fillStyle = color;
-        ageCtx.fillRect(0, 0, w, h);
-        ageCtx.globalCompositeOperation = "destination-in";
-        ageCtx.drawImage(bucketCtx.canvas, 0, 0);
-        ageCtx.restore();
     });
 }
 
@@ -258,25 +224,18 @@ function renderStayTint() {
     stayCtx.clearRect(0, 0, w, h);
     if (pathCoordinates.length === 0) return;
     const mpp = calcMpp();
-    const offscreen = document.createElement("canvas");
-    offscreen.width = w;
-    offscreen.height = h;
-    const offCtx = offscreen.getContext("2d");
     pathCoordinates.forEach(point => {
         const stayMin = (point.endTime - point.startTime) / 60000;
         if (stayMin < 10) return;
         const pos    = map.latLngToContainerPoint([point.lat, point.lng]);
         const radius = metersToPixels(getStayRadiusMeters(stayMin), mpp);
-        const grad = offCtx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius);
+        const grad = stayCtx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius);
         grad.addColorStop(0,   "rgba(255, 220, 100, 0.18)");
         grad.addColorStop(0.6, "rgba(255, 220, 100, 0.08)");
         grad.addColorStop(1,   "rgba(255, 220, 100, 0)");
-        offCtx.fillStyle = grad;
-        offCtx.beginPath();
-        offCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-        offCtx.fill();
+        stayCtx.fillStyle = grad;
+        stayCtx.beginPath(); stayCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2); stayCtx.fill();
     });
-    stayCtx.drawImage(offscreen, 0, 0);
 }
 
 function getStayRadiusMeters(stayMin) {
@@ -285,7 +244,31 @@ function getStayRadiusMeters(stayMin) {
     return FOG_RADIUS_M * (1.0 + (stayMin - 10) / (180 - 10));
 }
 
-// ── 레벨 계산 ─────────────────────────────────────
+// ── 줌 레벨에 따른 사진 마커 크기 계산 ───────────────
+function getPhotoMarkerSize() {
+    const zoom = map.getZoom();
+    if (zoom >= MARKER_MAX_ZOOM) return MARKER_MAX_SIZE;
+    if (zoom <= MARKER_MIN_ZOOM) return MARKER_MIN_SIZE;
+    const ratio = (zoom - MARKER_MIN_ZOOM) / (MARKER_MAX_ZOOM - MARKER_MIN_ZOOM);
+    return Math.round(MARKER_MIN_SIZE + ratio * (MARKER_MAX_SIZE - MARKER_MIN_SIZE));
+}
+
+function updatePhotoMarkerSizes() {
+    const size = getPhotoMarkerSize();
+    photoClusterGroup.eachLayer(marker => {
+        if (marker._photoData) {
+            const icon = L.divIcon({
+                className: "photo-marker",
+                html: `<img src="${marker._photoData.thumb}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:6px;border:2px solid #fff;" />`,
+                iconSize: [size, size],
+                iconAnchor: [size / 2, size]
+            });
+            marker.setIcon(icon);
+        }
+    });
+}
+
+// ── 레벨 계산 ──────────────────────────────────────
 function calcLevel() {
     const distKm     = totalDistance / 1000;
     const memCount   = memories.length;
@@ -294,89 +277,64 @@ function calcLevel() {
     for (const row of LEVEL_TABLE) {
         if (distKm >= row.distKm && memCount >= row.memories && photoCount >= row.photos) {
             currentLevel = row;
-        } else {
-            break;
-        }
+        } else { break; }
     }
     return currentLevel;
 }
 
-// ── HUD 업데이트 (실제 데이터 연동) ───────────────
 function updateHud() {
     const current    = calcLevel();
     const distKm     = totalDistance / 1000;
     const memCount   = memories.length;
     const photoCount = photos.length;
     const nextRow    = LEVEL_TABLE.find(r => r.level === current.level + 1);
-
-    // 1단: 칭호 + 레벨
     const titleEl = document.getElementById("hud-title-text");
     const levelEl = document.getElementById("hud-level-num");
     if (titleEl) titleEl.textContent = current.title;
     if (levelEl) levelEl.textContent = current.level;
-
-    // 거리 진행도
     const distCurEl  = document.getElementById("prog-dist-cur");
     const distBarEl  = document.getElementById("prog-dist-bar");
     const distNextEl = document.getElementById("prog-dist-next");
     if (distCurEl) distCurEl.textContent = distKm.toFixed(2) + " km";
     if (distBarEl && distNextEl) {
-        if (!nextRow) {
-            distBarEl.style.width  = "100%";
-            distNextEl.textContent = "최고 레벨 달성!";
-        } else {
-            const pct = nextRow.distKm > current.distKm
-                ? Math.min(100, ((distKm - current.distKm) / (nextRow.distKm - current.distKm)) * 100)
-                : 100;
-            distBarEl.style.width  = pct.toFixed(1) + "%";
+        if (!nextRow) { distBarEl.style.width = "100%"; distNextEl.textContent = "최고 레벨 달성!"; }
+        else {
+            const pct = nextRow.distKm > current.distKm ? Math.min(100, ((distKm - current.distKm) / (nextRow.distKm - current.distKm)) * 100) : 100;
+            distBarEl.style.width = pct.toFixed(1) + "%";
             const remain = Math.max(0, nextRow.distKm - distKm);
             distNextEl.textContent = remain > 0.01 ? `다음까지 ${remain.toFixed(1)}km` : "조건 충족!";
         }
     }
-
-    // 기억 진행도
     const memCurEl  = document.getElementById("prog-mem-cur");
     const memBarEl  = document.getElementById("prog-mem-bar");
     const memNextEl = document.getElementById("prog-mem-next");
     if (memCurEl) memCurEl.textContent = memCount + " 개";
     if (memBarEl && memNextEl) {
-        if (!nextRow || nextRow.memories === 0) {
-            memBarEl.style.width  = "100%";
-            memNextEl.textContent = nextRow ? "조건 없음" : "최고!";
-        } else {
-            const pct = nextRow.memories > current.memories
-                ? Math.min(100, ((memCount - current.memories) / (nextRow.memories - current.memories)) * 100)
-                : 100;
-            memBarEl.style.width  = pct.toFixed(1) + "%";
+        if (!nextRow || nextRow.memories === 0) { memBarEl.style.width = "100%"; memNextEl.textContent = nextRow ? "조건 없음" : "최고!"; }
+        else {
+            const pct = nextRow.memories > current.memories ? Math.min(100, ((memCount - current.memories) / (nextRow.memories - current.memories)) * 100) : 100;
+            memBarEl.style.width = pct.toFixed(1) + "%";
             const remain = Math.max(0, nextRow.memories - memCount);
             memNextEl.textContent = remain > 0 ? `다음까지 ${remain}개` : "조건 충족!";
         }
     }
-
-    // 사진 진행도
     const photoCurEl  = document.getElementById("prog-photo-cur");
     const photoBarEl  = document.getElementById("prog-photo-bar");
     const photoNextEl = document.getElementById("prog-photo-next");
     if (photoCurEl) photoCurEl.textContent = photoCount + " 개";
     if (photoBarEl && photoNextEl) {
-        if (!nextRow || nextRow.photos === 0) {
-            photoBarEl.style.width  = "100%";
-            photoNextEl.textContent = nextRow ? "조건 없음" : "최고!";
-        } else {
-            const pct = nextRow.photos > current.photos
-                ? Math.min(100, ((photoCount - current.photos) / (nextRow.photos - current.photos)) * 100)
-                : 100;
-            photoBarEl.style.width  = pct.toFixed(1) + "%";
+        if (!nextRow || nextRow.photos === 0) { photoBarEl.style.width = "100%"; photoNextEl.textContent = nextRow ? "조건 없음" : "최고!"; }
+        else {
+            const pct = nextRow.photos > current.photos ? Math.min(100, ((photoCount - current.photos) / (nextRow.photos - current.photos)) * 100) : 100;
+            photoBarEl.style.width = pct.toFixed(1) + "%";
             const remain = Math.max(0, nextRow.photos - photoCount);
             photoNextEl.textContent = remain > 0 ? `다음까지 ${remain}개` : "조건 충족!";
         }
     }
 }
 
-// ── 통계 업데이트 (HUD 연동) ──────────────────────
 function updateStats() {
     const todayDist = calcTodayDistance();
-    // 구버전 HUD 요소가 있으면 업데이트 (없어도 에러 없이 통과)
     const distEl  = document.getElementById("dist-val");
     const todayEl = document.getElementById("today-dist-val");
     const memEl   = document.getElementById("memory-count-val");
@@ -385,7 +343,6 @@ function updateStats() {
     if (todayEl) todayEl.innerHTML = `${(todayDist / 1000).toFixed(2)}<span>km</span>`;
     if (memEl)   memEl.innerHTML   = `${memories.length}<span>개</span>`;
     if (photoEl) photoEl.innerHTML = `${photos.length}<span>개</span>`;
-    // 새 HUD 업데이트
     updateHud();
 }
 
@@ -394,11 +351,8 @@ function toggleHud() {
     document.getElementById("hud").classList.toggle("expanded", isHudExpanded);
     document.getElementById("controls").classList.toggle("hud-open", isHudExpanded);
     document.getElementById("help-btn").classList.toggle("hud-open", isHudExpanded);
-
     if (isHudExpanded) {
-        setTimeout(() => {
-            document.addEventListener("click", handleHudOutsideClick);
-        }, 0);
+        setTimeout(() => { document.addEventListener("click", handleHudOutsideClick); }, 0);
     } else {
         document.removeEventListener("click", handleHudOutsideClick);
     }
@@ -434,15 +388,11 @@ function syncFogButton() {
     }
 }
 
-function toggleHelp() {
-    document.getElementById("help-popup").classList.toggle("show");
-}
-
+function toggleHelp() { document.getElementById("help-popup").classList.toggle("show"); }
 function handleHelpOverlayClick(event) {
     const box = document.getElementById("help-content-box");
     if (!box.contains(event.target)) toggleHelp();
 }
-
 function switchHelpTab(tab) {
     ["ask", "info"].forEach(t => {
         document.getElementById("htab-" + t).classList.toggle("active", t === tab);
@@ -450,31 +400,42 @@ function switchHelpTab(tab) {
     });
 }
 
-function resetRecordingState() {
-    isRecording = false;
-    syncRecordingUI();
-    stopTracking();
+// ── 사진 메뉴 ──────────────────────────────────────
+function togglePhotoMenu() {
+    const menu    = document.getElementById("photo-menu");
+    const overlay = document.getElementById("photo-menu-overlay");
+    const isOpen  = menu.classList.contains("open");
+    if (isOpen) { closePhotoMenu(); } else { menu.classList.add("open"); overlay.classList.add("show"); }
 }
+
+function closePhotoMenu() {
+    document.getElementById("photo-menu").classList.remove("open");
+    document.getElementById("photo-menu-overlay").classList.remove("show");
+}
+
+function triggerCamera() {
+    closePhotoMenu();
+    document.getElementById("camera-input").click();
+}
+
+function triggerGallery() {
+    closePhotoMenu();
+    document.getElementById("gallery-input").click();
+}
+
+function resetRecordingState() { isRecording = false; syncRecordingUI(); stopTracking(); }
 
 function toggleRecording() {
     if (isRecording) {
-        isRecording = false;
-        syncRecordingUI();
-        stopTracking();
-        compactPathData();
-        scheduleSave();
-        return;
+        isRecording = false; syncRecordingUI(); stopTracking(); compactPathData(); scheduleSave(); return;
     }
-    isRecording = true;
-    syncRecordingUI();
-    startTracking();
+    isRecording = true; syncRecordingUI(); startTracking();
 }
 
 function toggleFog() {
     isFogEnabled = !isFogEnabled;
     localStorage.setItem(FOG_ENABLED_KEY, String(isFogEnabled));
-    syncFogButton();
-    scheduleRender();
+    syncFogButton(); scheduleRender();
 }
 
 function startTracking() {
@@ -494,34 +455,23 @@ function handlePosition(position) {
     const accuracy = Number(position.coords.accuracy) || Infinity;
     const latlng   = L.latLng(position.coords.latitude, position.coords.longitude);
     currentPos     = latlng;
-
     if (!playerMarker) {
-        playerMarker = L.marker(latlng, {
-            icon: L.divIcon({ className: "player-marker", iconSize: [18, 18] })
-        }).addTo(map);
+        playerMarker = L.marker(latlng, { icon: L.divIcon({ className: "player-marker", iconSize: [18, 18] }) }).addTo(map);
         map.setView(latlng, 16);
-    } else {
-        playerMarker.setLatLng(latlng);
-    }
-
+    } else { playerMarker.setLatLng(latlng); }
     if (!isRecording) return;
-
     if (accuracy > 100) { recStatusBox.textContent = `GPS 너무 약함 (${Math.round(accuracy)}m)`; return; }
     recStatusBox.textContent = accuracy > MAX_ACCURACY_M ? `GPS 약함 (${Math.round(accuracy)}m)` : "기록 중";
-
     const now = Date.now();
     if (pathCoordinates.length === 0) {
         pathCoordinates.push(createPathPoint(latlng, now));
         updateStats(); scheduleSave(); scheduleRender(); return;
     }
-
     const last          = pathCoordinates[pathCoordinates.length - 1];
     const dist          = distanceToPoint(latlng, last);
     const stayThreshold = getDynamicStayThreshold(accuracy);
-
     if (dist <= stayThreshold) {
-        last.endTime = now;
-        last.visits  = (last.visits || 1) + 1;
+        last.endTime = now; last.visits = (last.visits || 1) + 1;
         last.lat += (latlng.lat - last.lat) * 0.3;
         last.lng += (latlng.lng - last.lng) * 0.3;
     } else {
@@ -598,9 +548,7 @@ function addMemory() {
     };
     memories.push(data);
     createMemoryMarker(data, true);
-    updateMemoryList();
-    updateStats();
-    scheduleSave();
+    updateMemoryList(); updateStats(); scheduleSave();
 }
 
 function createMemoryMarker(data, openPopup = false) {
@@ -666,14 +614,14 @@ function updatePhotoList() {
     container.innerHTML = "";
     [...photos].reverse().forEach(p => {
         const item = document.createElement("div"); item.className = "photo-list-item";
-        const img = document.createElement("img"); img.src = p.photo;
+        const img = document.createElement("img"); img.src = p.thumb || p.photo;
         const date = document.createElement("div"); date.className = "photo-list-date"; date.textContent = p.dateString;
         const del = document.createElement("div"); del.className = "photo-list-del"; del.textContent = "✕";
         del.addEventListener("click", e => { e.stopPropagation(); deletePhoto(p.id); updatePhotoList(); });
         item.addEventListener("click", () => {
             map.flyTo([p.lat, p.lng], 17);
-            const marker = photoMarkers.get(p.id);
-            if (marker) marker.openPopup();
+            const markerLayer = findPhotoMarker(p.id);
+            if (markerLayer) markerLayer.openPopup();
             toggleSidebar(false);
         });
         item.appendChild(img); item.appendChild(date); item.appendChild(del);
@@ -681,11 +629,16 @@ function updatePhotoList() {
     });
 }
 
+function findPhotoMarker(id) {
+    let found = null;
+    photoClusterGroup.eachLayer(layer => { if (layer._photoData && layer._photoData.id === id) found = layer; });
+    return found;
+}
+
 function adjustHourDial(dir) {
     const next = dialHours + dir;
     if (next < 1 || next > 20) return;
-    dialHours = next;
-    updateDialUI();
+    dialHours = next; updateDialUI();
 }
 
 function updateDialUI() {
@@ -709,22 +662,15 @@ function exportGpx() {
 `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Giloa - 나의 대동여지도"
      xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata>
-    <name>${name}</name>
-    <time>${new Date().toISOString()}</time>
-  </metadata>
-  <trk>
-    <name>${name}</name>
-    <trkseg>
+  <metadata><name>${name}</name><time>${new Date().toISOString()}</time></metadata>
+  <trk><name>${name}</name><trkseg>
 ${trkpts}
-    </trkseg>
-  </trk>
+  </trkseg></trk>
 </gpx>`;
     const saves = loadGpxSaves();
     const id    = String(Date.now());
     saves.push({ id, name, createdAt: Date.now(), pointCount: filtered.length, gpxContent });
-    saveGpxSaves(saves);
-    updateGpxSavedList();
+    saveGpxSaves(saves); updateGpxSavedList();
     const blob = new Blob([gpxContent], { type: "application/gpx+xml" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
@@ -837,7 +783,7 @@ function persistState() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
             pathCoordinates: pathCoordinates.map(p => ({ lat: p.lat, lng: p.lng, startTime: p.startTime, endTime: p.endTime, visits: p.visits || 1 })),
             memories: memories.map(m => ({ id: m.id, lat: m.lat, lng: m.lng, name: m.name, time: m.time, dateString: m.dateString, timeString: m.timeString })),
-            photos: photos.map(p => ({ id: p.id, lat: p.lat, lng: p.lng, photo: p.photo, time: p.time, dateString: p.dateString, timeString: p.timeString })),
+            photos: photos.map(p => ({ id: p.id, lat: p.lat, lng: p.lng, thumb: p.thumb, photo: p.photo, time: p.time, dateString: p.dateString, timeString: p.timeString })),
             totalDistance
         }));
     } catch (e) { console.error("저장 실패", e); }
@@ -865,7 +811,7 @@ function loadState() {
         }
         if (isFinite(saved.totalDistance)) totalDistance = saved.totalDistance;
         if (Array.isArray(saved.photos)) {
-            photos = saved.photos.filter(p => isFinite(p.lat) && isFinite(p.lng) && typeof p.photo === "string");
+            photos = saved.photos.filter(p => isFinite(p.lat) && isFinite(p.lng) && (typeof p.thumb === "string" || typeof p.photo === "string"));
         }
         const savedFog = localStorage.getItem(FOG_ENABLED_KEY);
         if (savedFog !== null) isFogEnabled = savedFog === "true";
@@ -873,42 +819,59 @@ function loadState() {
     } catch (e) { console.error("복원 실패", e); }
 }
 
-function handlePhoto(event) {
-    const file = event.target.files[0]; if (!file) return;
-    const arrayReader = new FileReader();
-    arrayReader.onload = function(ae) {
-        const gps = parseExifGps(ae.target.result);
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const now = new Date();
-            const img = new Image();
-            img.onload = function() {
-                const canvas = document.createElement("canvas");
-                const maxSize = 400;
-                let w = img.width, h = img.height;
-                if (w > h && w > maxSize) { h = h * maxSize / w; w = maxSize; }
-                else if (h > maxSize)     { w = w * maxSize / h; h = maxSize; }
-                canvas.width = w; canvas.height = h;
-                canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-                const compressed = canvas.toDataURL("image/jpeg", 0.6);
-                const lat = gps ? gps.lat : (currentPos ? currentPos.lat : null);
-                const lng = gps ? gps.lng : (currentPos ? currentPos.lng : null);
-                if (!lat || !lng) { alert("사진에 위치 정보가 없고 현재 위치도 수신 중입니다."); return; }
-                if (!gps && currentPos) alert("사진에 위치 정보가 없어 현재 위치에 저장합니다.");
-                const data = {
-                    id: String(now.getTime()), lat, lng, photo: compressed, time: now.getTime(),
-                    dateString: now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }),
-                    timeString: now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
+// ── 사진 처리 (카메라 + 갤러리 공통) ──────────────
+function handlePhotos(event) {
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
+    let processed = 0;
+    files.forEach(file => {
+        const arrayReader = new FileReader();
+        arrayReader.onload = function(ae) {
+            const gps = parseExifGps(ae.target.result);
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const now = new Date();
+                const img = new Image();
+                img.onload = function() {
+                    // 팝업용 200px
+                    const popup = resizeImage(img, 200);
+                    // 마커용 40px
+                    const thumb = resizeImage(img, 40);
+                    const lat = gps ? gps.lat : (currentPos ? currentPos.lat : null);
+                    const lng = gps ? gps.lng : (currentPos ? currentPos.lng : null);
+                    if (!lat || !lng) {
+                        processed++;
+                        if (processed === files.length) { updateStats(); scheduleSave(); event.target.value = ""; }
+                        return;
+                    }
+                    const data = {
+                        id: String(now.getTime()) + Math.random().toString(36).slice(2),
+                        lat, lng, photo: popup, thumb: thumb, time: now.getTime(),
+                        dateString: now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }),
+                        timeString: now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
+                    };
+                    photos.push(data);
+                    createPhotoMarker(data, false);
+                    processed++;
+                    if (processed === files.length) { updateStats(); scheduleSave(); }
                 };
-                photos.push(data); createPhotoMarker(data, true);
-                map.flyTo([lat, lng], 17); updateStats(); scheduleSave();
+                img.src = e.target.result;
             };
-            img.src = e.target.result;
+            reader.readAsDataURL(file);
         };
-        reader.readAsDataURL(file);
-    };
-    arrayReader.readAsArrayBuffer(file);
+        arrayReader.readAsArrayBuffer(file);
+    });
     event.target.value = "";
+}
+
+function resizeImage(img, maxSize) {
+    const canvas = document.createElement("canvas");
+    let w = img.width, h = img.height;
+    if (w > h && w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+    else if (h > maxSize)     { w = Math.round(w * maxSize / h); h = maxSize; }
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.7);
 }
 
 function parseExifGps(buffer) {
@@ -951,26 +914,34 @@ function parseExifGps(buffer) {
 }
 
 function createPhotoMarker(data, openPopup = false) {
+    const size = getPhotoMarkerSize();
     const marker = L.marker([data.lat, data.lng], {
-        pane: "memoryPane",
-        icon: L.divIcon({ className: "photo-marker", html: `<img src="${data.photo}" />`, iconSize: [44, 44], iconAnchor: [22, 44] })
-    }).addTo(map);
+        icon: L.divIcon({
+            className: "photo-marker",
+            html: `<img src="${data.thumb}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:6px;border:2px solid #fff;" />`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size]
+        })
+    });
+    marker._photoData = data;
     const popupEl = document.createElement("div"); popupEl.className = "photo-popup";
     const img = document.createElement("img"); img.src = data.photo;
+    img.style.cssText = "width:200px;border-radius:8px;margin-bottom:8px;display:block;";
     const info = document.createElement("div");
     info.style.cssText = "font-size:12px;color:rgba(255,255,255,0.6);text-align:center;margin:6px 0 8px;";
     info.textContent = `${data.dateString} ${data.timeString}`;
     const delBtn = document.createElement("button"); delBtn.className = "popup-delete-btn"; delBtn.textContent = "사진 삭제";
     delBtn.addEventListener("click", () => { deletePhoto(data.id); marker.closePopup(); });
     popupEl.appendChild(img); popupEl.appendChild(info); popupEl.appendChild(delBtn);
-    marker.bindPopup(popupEl); photoMarkers.set(data.id, marker);
+    marker.bindPopup(popupEl);
+    photoClusterGroup.addLayer(marker);
     if (openPopup) marker.openPopup();
 }
 
 function deletePhoto(id) {
     photos = photos.filter(p => p.id !== id);
-    const marker = photoMarkers.get(id);
-    if (marker) { map.removeLayer(marker); photoMarkers.delete(id); }
+    const marker = findPhotoMarker(id);
+    if (marker) photoClusterGroup.removeLayer(marker);
     updateStats(); scheduleSave();
 }
 
@@ -980,16 +951,14 @@ function escapeHtml(value) {
 
 function renderStoredMarkers()      { memories.forEach(m => createMemoryMarker(m, false)); }
 function renderStoredPhotoMarkers() { photos.forEach(p => createPhotoMarker(p, false)); }
-
 function initGpxDial() { dialHours = 12; updateDialUI(); }
 
 function init() {
-    attachCanvasLayers();
     resizeCanvas();
     loadState();
     renderStoredMarkers();
     renderStoredPhotoMarkers();
-    updateStats();       // ← loadState 후 바로 호출 → updateHud()도 같이 실행됨
+    updateStats();
     updateMemoryList();
     syncRecordingUI();
     syncFogButton();
