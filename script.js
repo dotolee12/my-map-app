@@ -843,39 +843,68 @@ function handlePhotos(event) {
     const files = Array.from(event.target.files);
     if (!files.length) return;
     let processed = 0;
+
+    const finishOne = () => {
+        processed++;
+        if (processed === files.length) {
+            updateStats(); scheduleSave(); updatePhotoList();
+            event.target.value = "";
+        }
+    };
+
     files.forEach(file => {
-        const arrayReader = new FileReader();
-        arrayReader.onload = function(ae) {
-            const gps = parseExifGps(ae.target.result);
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const now = new Date();
-                const img = new Image();
-                img.onload = function() {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const now = new Date();
+            const img = new Image();
+            img.onload = function() {
+                // exif-js로 GPS 읽기
+                EXIF.getData(img, function() {
+                    let lat = null, lng = null;
+                    const latVal  = EXIF.getTag(this, "GPSLatitude");
+                    const latRef  = EXIF.getTag(this, "GPSLatitudeRef");
+                    const lngVal  = EXIF.getTag(this, "GPSLongitude");
+                    const lngRef  = EXIF.getTag(this, "GPSLongitudeRef");
+
+                    if (latVal && lngVal) {
+                        lat = latVal[0] + latVal[1]/60 + latVal[2]/3600;
+                        lng = lngVal[0] + lngVal[1]/60 + lngVal[2]/3600;
+                        if (latRef === "S") lat = -lat;
+                        if (lngRef === "W") lng = -lng;
+                    }
+
+                    // GPS 없으면 현재 위치, 그것도 없으면 지도 중심
+                    if (!lat || !lng) {
+                        if (currentPos) {
+                            lat = currentPos.lat;
+                            lng = currentPos.lng;
+                        } else {
+                            const center = map.getCenter();
+                            lat = center.lat;
+                            lng = center.lng;
+                        }
+                    }
+
                     const popup = resizeImage(img, 200);
                     const thumb = resizeImage(img, 40);
-                    const lat = gps ? gps.lat : (currentPos ? currentPos.lat : null);
-                    const lng = gps ? gps.lng : (currentPos ? currentPos.lng : null);
-                    if (!lat || !lng) {
-                        processed++;
-                        if (processed === files.length) { updateStats(); scheduleSave(); event.target.value = ""; }
-                        return;
-                    }
                     const data = {
                         id: String(now.getTime()) + Math.random().toString(36).slice(2),
-                        lat, lng, photo: popup, thumb: thumb, time: now.getTime(),
-                        dateString: now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }),
-                        timeString: now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
+                        lat, lng,
+                        photo: popup, thumb: thumb,
+                        time: now.getTime(),
+                        dateString: now.toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric" }),
+                        timeString: now.toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit" })
                     };
                     photos.push(data);
-                    createPhotoMarker(data, false);
-                    processed++;
-                    if (processed === files.length) { updateStats(); scheduleSave(); }
-                };
-                img.src = e.target.result;
+                    createPhotoMarker(data, true);  // true = 찍자마자 팝업 열기
+                    finishOne();
+                });
             };
-            reader.readAsDataURL(file);
+            img.src = e.target.result;
         };
+        reader.readAsDataURL(file);
+    });
+}
         arrayReader.readAsArrayBuffer(file);
     });
     event.target.value = "";
