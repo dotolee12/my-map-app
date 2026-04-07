@@ -68,7 +68,6 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").ad
 map.createPane("memoryPane");
 map.getPane("memoryPane").style.zIndex = 500;
 
-// ── 사진 클러스터 그룹 ──────────────────────────────
 const photoClusterGroup = L.markerClusterGroup({
     maxClusterRadius: 60,
     disableClusteringAtZoom: CLUSTER_ZOOM_THRESHOLD + 1,
@@ -124,6 +123,7 @@ function calcMpp() {
 
 function metersToPixels(meters, mpp) { return (meters / mpp) * 10; }
 
+// ── fog 겹침 수정: 버킷별 일괄 처리 ──────────────────
 function renderFog() {
     const w = fogCanvas.width, h = fogCanvas.height;
     fogCtx.clearRect(0, 0, w, h);
@@ -131,54 +131,77 @@ function renderFog() {
     fogCtx.fillStyle = `rgba(8, 10, 18, ${FOG_ALPHA})`;
     fogCtx.fillRect(0, 0, w, h);
     if (pathCoordinates.length === 0) return;
+
     const now    = Date.now();
     const mpp    = calcMpp();
     const radius = metersToPixels(FOG_RADIUS_M, mpp);
+
+    const BUCKET = 0.05;
+    const buckets = new Map();
+
+    const addToBucket = (alpha, drawFn) => {
+        const key = Math.round(alpha / BUCKET) * BUCKET;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(drawFn);
+    };
+
+    if (pathCoordinates.length === 1) {
+        const point    = pathCoordinates[0];
+        const ageHours = (now - point.startTime) / 3600000;
+        const alpha    = getPathVisibility(ageHours);
+        const stayMin  = (point.endTime - point.startTime) / 60000;
+        const stayR    = metersToPixels(getStayRadiusMeters(stayMin), mpp);
+        const pos      = map.latLngToContainerPoint([point.lat, point.lng]);
+        addToBucket(alpha, ctx => {
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, stayR, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    } else {
+        for (let i = 1; i < pathCoordinates.length; i++) {
+            const point    = pathCoordinates[i];
+            const ageHours = (now - point.startTime) / 3600000;
+            const alpha    = getPathVisibility(ageHours);
+            const stayMin  = (point.endTime - point.startTime) / 60000;
+            const stayR    = metersToPixels(getStayRadiusMeters(stayMin), mpp);
+            const prev     = map.latLngToContainerPoint([pathCoordinates[i-1].lat, pathCoordinates[i-1].lng]);
+            const pos      = map.latLngToContainerPoint([point.lat, point.lng]);
+
+            if (stayMin >= 10) {
+                addToBucket(alpha, ctx => {
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, stayR, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+            addToBucket(alpha, ctx => {
+                ctx.beginPath();
+                ctx.moveTo(prev.x, prev.y);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            });
+        }
+    }
+
     const offscreen = document.createElement("canvas");
     offscreen.width  = w;
     offscreen.height = h;
     const offCtx = offscreen.getContext("2d");
-    offCtx.clearRect(0, 0, w, h);
-    if (pathCoordinates.length === 1) {
-        const point      = pathCoordinates[0];
-        const ageHours   = (now - point.startTime) / 3600000;
-        const alpha      = getPathVisibility(ageHours);
-        const stayMin    = (point.endTime - point.startTime) / 60000;
-        const stayRadius = metersToPixels(getStayRadiusMeters(stayMin), mpp);
-        const pos        = map.latLngToContainerPoint([point.lat, point.lng]);
-        offCtx.fillStyle = `rgba(0,0,0,${alpha})`;
-        offCtx.beginPath();
-        offCtx.arc(pos.x, pos.y, stayRadius, 0, Math.PI * 2);
-        offCtx.fill();
-    } else {
-        for (let i = 1; i < pathCoordinates.length; i++) {
-            const point      = pathCoordinates[i];
-            const ageHours   = (now - point.startTime) / 3600000;
-            const alpha      = getPathVisibility(ageHours);
-            const stayMin    = (point.endTime - point.startTime) / 60000;
-            const stayRadius = metersToPixels(getStayRadiusMeters(stayMin), mpp);
-            const prev       = map.latLngToContainerPoint([pathCoordinates[i-1].lat, pathCoordinates[i-1].lng]);
-            const pos        = map.latLngToContainerPoint([point.lat, point.lng]);
-            if (stayMin >= 10) {
-                offCtx.fillStyle = `rgba(0,0,0,${alpha})`;
-                offCtx.beginPath();
-                offCtx.arc(pos.x, pos.y, stayRadius, 0, Math.PI * 2);
-                offCtx.fill();
-            }
-            offCtx.strokeStyle = `rgba(0,0,0,${alpha})`;
-            offCtx.lineWidth   = radius * 2;
-            offCtx.lineCap     = "round";
-            offCtx.lineJoin    = "round";
-            offCtx.beginPath();
-            offCtx.moveTo(prev.x, prev.y);
-            offCtx.lineTo(pos.x, pos.y);
-            offCtx.stroke();
-        }
+
+    for (const [alpha, drawFns] of buckets) {
+        offCtx.clearRect(0, 0, w, h);
+        offCtx.fillStyle   = `rgba(0,0,0,${alpha})`;
+        offCtx.strokeStyle = `rgba(0,0,0,${alpha})`;
+        offCtx.lineWidth   = radius * 2;
+        offCtx.lineCap     = "round";
+        offCtx.lineJoin    = "round";
+        drawFns.forEach(fn => fn(offCtx));
+
+        fogCtx.save();
+        fogCtx.globalCompositeOperation = "destination-out";
+        fogCtx.drawImage(offscreen, 0, 0);
+        fogCtx.restore();
     }
-    fogCtx.save();
-    fogCtx.globalCompositeOperation = "destination-out";
-    fogCtx.drawImage(offscreen, 0, 0);
-    fogCtx.restore();
 }
 
 function getPathVisibility(ageHours) {
@@ -244,7 +267,6 @@ function getStayRadiusMeters(stayMin) {
     return FOG_RADIUS_M * (1.0 + (stayMin - 10) / (180 - 10));
 }
 
-// ── 줌 레벨에 따른 사진 마커 크기 계산 ───────────────
 function getPhotoMarkerSize() {
     const zoom = map.getZoom();
     if (zoom >= MARKER_MAX_ZOOM) return MARKER_MAX_SIZE;
@@ -268,7 +290,6 @@ function updatePhotoMarkerSizes() {
     });
 }
 
-// ── 레벨 계산 ──────────────────────────────────────
 function calcLevel() {
     const distKm     = totalDistance / 1000;
     const memCount   = memories.length;
@@ -400,7 +421,6 @@ function switchHelpTab(tab) {
     });
 }
 
-// ── 사진 메뉴 ──────────────────────────────────────
 function togglePhotoMenu() {
     const menu    = document.getElementById("photo-menu");
     const overlay = document.getElementById("photo-menu-overlay");
@@ -819,7 +839,6 @@ function loadState() {
     } catch (e) { console.error("복원 실패", e); }
 }
 
-// ── 사진 처리 (카메라 + 갤러리 공통) ──────────────
 function handlePhotos(event) {
     const files = Array.from(event.target.files);
     if (!files.length) return;
@@ -833,9 +852,7 @@ function handlePhotos(event) {
                 const now = new Date();
                 const img = new Image();
                 img.onload = function() {
-                    // 팝업용 200px
                     const popup = resizeImage(img, 200);
-                    // 마커용 40px
                     const thumb = resizeImage(img, 40);
                     const lat = gps ? gps.lat : (currentPos ? currentPos.lat : null);
                     const lng = gps ? gps.lng : (currentPos ? currentPos.lng : null);
@@ -953,6 +970,25 @@ function renderStoredMarkers()      { memories.forEach(m => createMemoryMarker(m
 function renderStoredPhotoMarkers() { photos.forEach(p => createPhotoMarker(p, false)); }
 function initGpxDial() { dialHours = 12; updateDialUI(); }
 
+// ── HUD 탭 클릭 연결 ──────────────────────────────
+function initHudTapTargets() {
+    const distItem  = document.querySelector(".hud-prog-item:nth-child(1)");
+    const memItem   = document.querySelector(".hud-prog-item:nth-child(2)");
+    const photoItem = document.querySelector(".hud-prog-item:nth-child(3)");
+    if (distItem) {
+        distItem.style.cursor = "pointer";
+        distItem.addEventListener("click", () => { toggleSidebar(true); switchTab("gpx"); });
+    }
+    if (memItem) {
+        memItem.style.cursor = "pointer";
+        memItem.addEventListener("click", () => { toggleSidebar(true); switchTab("memory"); });
+    }
+    if (photoItem) {
+        photoItem.style.cursor = "pointer";
+        photoItem.addEventListener("click", () => { toggleSidebar(true); switchTab("photo"); });
+    }
+}
+
 function init() {
     resizeCanvas();
     loadState();
@@ -964,6 +1000,7 @@ function init() {
     syncFogButton();
     scheduleRender();
     initGpxDial();
+    initHudTapTargets();
 }
 
 map.whenReady(() => init());
