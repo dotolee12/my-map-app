@@ -123,7 +123,6 @@ function calcMpp() {
 
 function metersToPixels(meters, mpp) { return (meters / mpp) * 10; }
 
-// ── fog 겹침 수정: 버킷별 일괄 처리 ──────────────────
 function renderFog() {
     const w = fogCanvas.width, h = fogCanvas.height;
     fogCtx.clearRect(0, 0, w, h);
@@ -853,38 +852,36 @@ function handlePhotos(event) {
     };
 
     files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const now = new Date();
-            const img = new Image();
-            img.onload = function() {
-                // exif-js로 GPS 읽기
-                EXIF.getData(img, function() {
-                    let lat = null, lng = null;
-                    const latVal  = EXIF.getTag(this, "GPSLatitude");
-                    const latRef  = EXIF.getTag(this, "GPSLatitudeRef");
-                    const lngVal  = EXIF.getTag(this, "GPSLongitude");
-                    const lngRef  = EXIF.getTag(this, "GPSLongitudeRef");
+        EXIF.getData(file, function() {
+            let lat = null, lng = null;
+            const latVal = EXIF.getTag(this, "GPSLatitude");
+            const latRef = EXIF.getTag(this, "GPSLatitudeRef");
+            const lngVal = EXIF.getTag(this, "GPSLongitude");
+            const lngRef = EXIF.getTag(this, "GPSLongitudeRef");
 
-                    if (latVal && lngVal) {
-                        lat = latVal[0] + latVal[1]/60 + latVal[2]/3600;
-                        lng = lngVal[0] + lngVal[1]/60 + lngVal[2]/3600;
-                        if (latRef === "S") lat = -lat;
-                        if (lngRef === "W") lng = -lng;
-                    }
+            if (latVal && lngVal) {
+                lat = latVal[0] + latVal[1]/60 + latVal[2]/3600;
+                lng = lngVal[0] + lngVal[1]/60 + lngVal[2]/3600;
+                if (latRef === "S") lat = -lat;
+                if (lngRef === "W") lng = -lng;
+            }
 
-                    // GPS 없으면 현재 위치, 그것도 없으면 지도 중심
-                    if (!lat || !lng) {
-                        if (currentPos) {
-                            lat = currentPos.lat;
-                            lng = currentPos.lng;
-                        } else {
-                            const center = map.getCenter();
-                            lat = center.lat;
-                            lng = center.lng;
-                        }
-                    }
+            if (!lat || !lng) {
+                if (currentPos) {
+                    lat = currentPos.lat;
+                    lng = currentPos.lng;
+                } else {
+                    const center = map.getCenter();
+                    lat = center.lat;
+                    lng = center.lng;
+                }
+            }
 
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const now = new Date();
+                const img = new Image();
+                img.onload = function() {
                     const popup = resizeImage(img, 200);
                     const thumb = resizeImage(img, 40);
                     const data = {
@@ -896,18 +893,14 @@ function handlePhotos(event) {
                         timeString: now.toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit" })
                     };
                     photos.push(data);
-                    createPhotoMarker(data, true);  // true = 찍자마자 팝업 열기
+                    createPhotoMarker(data, true);
                     finishOne();
-                });
+                };
+                img.src = e.target.result;
             };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        });
     });
-}
-        arrayReader.readAsArrayBuffer(file);
-    });
-    event.target.value = "";
 }
 
 function resizeImage(img, maxSize) {
@@ -918,45 +911,6 @@ function resizeImage(img, maxSize) {
     canvas.width = w; canvas.height = h;
     canvas.getContext("2d").drawImage(img, 0, 0, w, h);
     return canvas.toDataURL("image/jpeg", 0.7);
-}
-
-function parseExifGps(buffer) {
-    const view = new DataView(buffer);
-    if (view.getUint16(0) !== 0xFFD8) return null;
-    let offset = 2;
-    while (offset < view.byteLength) {
-        const marker = view.getUint16(offset); offset += 2;
-        if (marker === 0xFFE1) {
-            const exifHeader = String.fromCharCode(view.getUint8(offset+2), view.getUint8(offset+3), view.getUint8(offset+4), view.getUint8(offset+5));
-            if (exifHeader !== "Exif") break;
-            const tiffOffset = offset + 8;
-            const littleEndian = view.getUint16(tiffOffset) === 0x4949;
-            const getU16 = o => view.getUint16(tiffOffset + o, littleEndian);
-            const getU32 = o => view.getUint32(tiffOffset + o, littleEndian);
-            const ifdOffset = getU32(4); const ifdCount = getU16(ifdOffset);
-            let gpsIfdOffset = null;
-            for (let i = 0; i < ifdCount; i++) {
-                const e = ifdOffset + 2 + i * 12;
-                if (getU16(e) === 0x8825) gpsIfdOffset = getU32(e + 8);
-            }
-            if (gpsIfdOffset === null) return null;
-            const gpsCount = getU16(gpsIfdOffset);
-            let latRef, lat, lngRef, lng;
-            for (let i = 0; i < gpsCount; i++) {
-                const e = gpsIfdOffset + 2 + i * 12; const tag = getU16(e); const vo = getU32(e + 8);
-                if (tag === 1) latRef = String.fromCharCode(view.getUint8(tiffOffset + vo));
-                if (tag === 3) lngRef = String.fromCharCode(view.getUint8(tiffOffset + vo));
-                if (tag === 2 || tag === 4) {
-                    const val = getU32(vo)/getU32(vo+4) + getU32(vo+8)/getU32(vo+12)/60 + getU32(vo+16)/getU32(vo+20)/3600;
-                    if (tag === 2) lat = val; if (tag === 4) lng = val;
-                }
-            }
-            if (lat == null || lng == null) return null;
-            return { lat: latRef === "S" ? -lat : lat, lng: lngRef === "W" ? -lng : lng };
-        }
-        offset += view.getUint16(offset);
-    }
-    return null;
 }
 
 function createPhotoMarker(data, openPopup = false) {
@@ -999,7 +953,6 @@ function renderStoredMarkers()      { memories.forEach(m => createMemoryMarker(m
 function renderStoredPhotoMarkers() { photos.forEach(p => createPhotoMarker(p, false)); }
 function initGpxDial() { dialHours = 12; updateDialUI(); }
 
-// ── HUD 탭 클릭 연결 ──────────────────────────────
 function initHudTapTargets() {
     const distItem  = document.querySelector(".hud-prog-item:nth-child(1)");
     const memItem   = document.querySelector(".hud-prog-item:nth-child(2)");
