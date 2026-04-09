@@ -22,7 +22,6 @@ html, body {
 .leaflet-popup-pane   { z-index: 451 !important; }
 .leaflet-tooltip-pane { z-index: 452 !important; }
 
-/* 사진 클러스터 */
 .photo-cluster-icon { background: transparent !important; border: none !important; }
 .photo-cluster-inner {
     width: 36px; height: 36px; border-radius: 50%;
@@ -179,7 +178,6 @@ html, body {
 }
 .photo-list-item:hover .photo-list-del { opacity: 1; }
 
-/* 사진 메뉴 팝업 */
 .photo-menu {
     position: absolute; right: 86px; bottom: 150px;
     background: rgba(20,20,35,0.96); border: 1px solid rgba(255,255,255,0.15);
@@ -320,9 +318,9 @@ html, body {
 .help-guide-item { display: flex; align-items: flex-start; gap: 12px; }
 .help-guide-icon { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 15px; }
 .red-dot  { background: rgba(255,68,68,0.15); border-color: rgba(255,68,68,0.3); }
-.red-dot::after  { content: ''; width: 10px; height: 10px; background: #ff4444; border-radius: 50%; }
+.red-dot::after  { content: ""; width: 10px; height: 10px; background: #ff4444; border-radius: 50%; }
 .blue-dot { background: rgba(77,184,255,0.15); border-color: rgba(77,184,255,0.3); }
-.blue-dot::after { content: ''; width: 10px; height: 10px; background: #4db8ff; border-radius: 50%; box-shadow: 0 0 8px #4db8ff; }
+.blue-dot::after { content: ""; width: 10px; height: 10px; background: #4db8ff; border-radius: 50%; box-shadow: 0 0 8px #4db8ff; }
 .help-guide-text { flex: 1; padding-top: 4px; }
 .help-guide-text b { font-size: 13px; color: #fff; display: block; margin-bottom: 3px; }
 .help-guide-text span { font-size: 11px; color: rgba(255,255,255,0.45); line-height: 1.6; }

@@ -15,7 +15,6 @@
 <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
 </head>
 <body>
-
 <div id="sidebar">
 <div class="sidebar-header">
 <h2>나의 기록들</h2>
@@ -161,7 +160,8 @@
 </div>
 <div id="hpanel-ask" class="help-panel">
 <p style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.7;margin-bottom:14px;">
-사용 중 불편한 점이나 건의사항을<br>카카오톡 오픈채팅으로 알려주세요!
+사용 중 불편한 점이나 건의사항을<br>
+카카오톡 오픈채팅으로 알려주세요!
 </p>
 <div class="help-notice">
 🔒 이 앱은 GPX 데이터를 외부 서버로 전송하지 않아요.<br>
@@ -257,11 +257,11 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="./script.js"></script>
 <script>
-if ('serviceWorker' in navigator) {
-window.addEventListener('load', () => {
-navigator.serviceWorker.register('./sw.js')
-.then(() => console.log('SW 등록 완료'))
-.catch(e => console.warn('SW 등록 실패', e));
+if ("serviceWorker" in navigator) {
+window.addEventListener("load", () => {
+navigator.serviceWorker.register("./sw.js")
+.then(() => console.log("SW 등록 완료"))
+.catch(e => console.warn("SW 등록 실패", e));
 });
 }
 </script>
