@@ -20,235 +20,118 @@
 <h2>나의 기록들</h2>
 <span onclick="toggleSidebar(false)" class="close-btn">✕</span>
 </div>
-
 <div id="fog-toggle-wrap">
 <div class="fog-toggle-row" onclick="toggleFog()">
 <span class="fog-toggle-label">어둠 효과</span>
 <div style="display:flex;align-items:center;gap:8px;">
 <span id="fog-toggle-state" class="fog-toggle-state on">켜짐</span>
-<div id="fog-toggle-btn" class="toggle-switch on">
-<div class="toggle-knob"></div>
-</div>
+<div id="fog-toggle-btn" class="toggle-switch on"><div class="toggle-knob"></div></div>
 </div>
 </div>
 <div class="sidebar-divider"></div>
 </div>
-
 <div class="sidebar-tabs">
-<div class="sidebar-tab active" id="tab-memory" onclick="switchTab('memory')">
-<span class="sidebar-tab-icon">★</span>
-<span class="sidebar-tab-text">기억</span>
+<div class="sidebar-tab active" id="tab-memory" onclick="switchTab('memory')"><span class="sidebar-tab-icon">★</span><span class="sidebar-tab-text">기억</span></div>
+<div class="sidebar-tab" id="tab-photo" onclick="switchTab('photo')"><span class="sidebar-tab-icon">🖼</span><span class="sidebar-tab-text">사진</span></div>
+<div class="sidebar-tab" id="tab-gpx" onclick="switchTab('gpx')"><span class="sidebar-tab-icon">👣</span><span class="sidebar-tab-text">발걸음</span></div>
 </div>
-<div class="sidebar-tab" id="tab-photo" onclick="switchTab('photo')">
-<span class="sidebar-tab-icon">🖼</span>
-<span class="sidebar-tab-text">사진</span>
-</div>
-<div class="sidebar-tab" id="tab-gpx" onclick="switchTab('gpx')">
-<span class="sidebar-tab-icon">👣</span>
-<span class="sidebar-tab-text">발걸음</span>
-</div>
-</div>
-
-<div id="panel-memory" class="tab-panel">
-<div id="memory-list-container">
-<p class="empty-message">아직 기록이 없습니다.</p>
-</div>
-</div>
-
-<div id="panel-photo" class="tab-panel" style="display:none;">
-<div id="photo-list-container">
-<p class="empty-message">아직 사진이 없습니다.</p>
-</div>
-</div>
-
+<div id="panel-memory" class="tab-panel"><div id="memory-list-container"><p class="empty-message">아직 기록이 없습니다.</p></div></div>
+<div id="panel-photo" class="tab-panel" style="display:none;"><div id="photo-list-container"><p class="empty-message">아직 사진이 없습니다.</p></div></div>
 <div id="panel-gpx" class="tab-panel" style="display:none;">
 <div class="gpx-section-label">🦶 발걸음 추출</div>
 <div class="gpx-dial-wrap">
-<div class="gpx-dial-row">
-<span class="gpx-dial-icon">⏱</span>
-<span class="gpx-dial-title">최근</span>
-<div class="gpx-dial-controls">
-<button class="dial-btn" onclick="adjustHourDial(-1)">‹</button>
-<span class="dial-value" id="dial-hour-label">12시간</span>
-<button class="dial-btn" onclick="adjustHourDial(1)">›</button>
-</div>
+<div class="gpx-dial-row"><span class="gpx-dial-icon">⏱</span><span class="gpx-dial-title">최근</span>
+<div class="gpx-dial-controls"><button class="dial-btn" onclick="adjustHourDial(-1)">‹</button><span class="dial-value" id="dial-hour-label">12시간</span><button class="dial-btn" onclick="adjustHourDial(1)">›</button></div>
 </div>
 <div class="gpx-dial-range-info" id="gpx-range-info">오늘 기준 최근 12시간 발걸음</div>
 </div>
-<div class="gpx-name-row">
-<input type="text" id="gpx-export-name" class="gpx-name-input" placeholder="발걸음 이름 (예: 한강 산책)">
-</div>
+<div class="gpx-name-row"><input type="text" id="gpx-export-name" class="gpx-name-input" placeholder="발걸음 이름 (예: 한강 산책)"></div>
 <button class="gpx-action-btn export" onclick="exportGpx()">🦶 이 발걸음 저장하기</button>
 <div class="sidebar-divider" style="margin-top:18px;"></div>
 <div class="gpx-section-label">📥 저장된 발걸음 열기</div>
-<div id="gpx-saved-list">
-<p class="empty-message">저장된 발걸음이 없습니다.</p>
-</div>
-<button class="gpx-action-btn import" onclick="document.getElementById('gpx-file-input').click()" style="margin-top:10px;">
-📂 파일에서 불러오기
-</button>
+<div id="gpx-saved-list"><p class="empty-message">저장된 발걸음이 없습니다.</p></div>
+<button class="gpx-action-btn import" onclick="document.getElementById('gpx-file-input').click()" style="margin-top:10px;">📂 파일에서 불러오기</button>
 <input type="file" id="gpx-file-input" accept=".gpx" style="display:none" onchange="importGpxFile(event)">
 <div id="gpx-import-status" class="gpx-status"></div>
 </div>
 </div>
-
 <div id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
 
-<div id="map-wrap"><div id="map"></div></div>
+<div id="map-wrap">
+<div id="map"></div>
 <canvas id="fog-canvas"></canvas>
 <canvas id="age-canvas"></canvas>
 <canvas id="stay-canvas"></canvas>
+</div>
 
 <div id="top-bar">
-<div id="ham-btn" onclick="toggleSidebar()">
-<div class="hline"></div><div class="hline"></div><div class="hline"></div>
-</div>
+<div id="ham-btn" onclick="toggleSidebar()"><div class="hline"></div><div class="hline"></div><div class="hline"></div></div>
 <div id="rec-status-box">대기 중</div>
 </div>
 
+<div id="tour-panel">
+  <div id="tour-header" onclick="toggleTourExpand()">
+    <span id="tour-title">📍 주변 관광지</span>
+    <span id="tour-count"></span>
+    <span id="tour-festival-badge"></span>
+  </div>
+  <div id="festival-strip-label">🎪 주변 축제</div>
+  <div id="festival-strip"></div>
+  <div id="tour-list"></div>
+  <div id="tour-expand-btn" onclick="toggleTourExpand()"><span id="tour-expand-icon">▼</span> <span id="tour-expand-text">더보기</span></div>
+  <div id="tour-loading" style="display:none;">검색 중...</div>
+  <div id="tour-empty" style="display:none;">이 지역에 관광지가 없어요</div>
+</div>
+
 <div id="controls">
-<div id="rec-btn" class="btn" onclick="toggleRecording()">
-<div class="icon-rec"></div>
-<div class="icon-stop"></div>
-</div>
-<div id="photo-btn" class="btn" onclick="togglePhotoMenu()">
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 0 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-<circle cx="12" cy="13" r="4"/>
-</svg>
-</div>
+<div id="rec-btn" class="btn" onclick="toggleRecording()"><div class="icon-rec"></div><div class="icon-stop"></div></div>
+<div id="photo-btn" class="btn" onclick="togglePhotoMenu()"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
 <div id="memo-btn" class="btn" onclick="addMemory()">★</div>
-<div id="loc-btn" class="btn" onclick="centerMap()">
-<div class="icon-loc"></div>
-</div>
+<div id="loc-btn" class="btn" onclick="centerMap()"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="7" stroke="#4db8ff" stroke-width="1.5" opacity="0.8"/><circle cx="11" cy="11" r="3" fill="#4db8ff"/><line x1="11" y1="1" x2="11" y2="6" stroke="#4db8ff" stroke-width="1.5" stroke-linecap="round"/><line x1="11" y1="16" x2="11" y2="21" stroke="#4db8ff" stroke-width="1.5" stroke-linecap="round"/><line x1="1" y1="11" x2="6" y2="11" stroke="#4db8ff" stroke-width="1.5" stroke-linecap="round"/><line x1="16" y1="11" x2="21" y2="11" stroke="#4db8ff" stroke-width="1.5" stroke-linecap="round"/></svg></div>
 </div>
 
 <div id="photo-menu" class="photo-menu">
-<div class="photo-menu-item" onclick="triggerCamera()">
-<span class="photo-menu-icon">
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 0 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-<circle cx="12" cy="13" r="4"/>
-</svg>
-</span>
-<span class="photo-menu-label">지금 찍기</span>
-</div>
-<div class="photo-menu-item" onclick="triggerGallery()">
-<span class="photo-menu-icon">
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-<rect x="3" y="3" width="18" height="18" rx="2"/>
-<circle cx="8.5" cy="8.5" r="1.5"/>
-<polyline points="21 15 16 10 5 21"/>
-</svg>
-</span>
-<span class="photo-menu-label">갤러리에서 불러오기</span>
-</div>
+<div class="photo-menu-item" onclick="triggerCamera()"><span class="photo-menu-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span><span class="photo-menu-label">지금 찍기</span></div>
+<div class="photo-menu-item" onclick="triggerGallery()"><span class="photo-menu-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span><span class="photo-menu-label">갤러리에서 불러오기</span></div>
 </div>
 <div id="photo-menu-overlay" onclick="closePhotoMenu()"></div>
-
 <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotos(event)">
 <input type="file" id="gallery-input" accept="image/*" multiple style="display:none" onchange="handlePhotos(event)">
 
 <div id="help-btn" class="btn" onclick="toggleHelp()">?</div>
-
 <div id="help-popup" onclick="handleHelpOverlayClick(event)">
 <div class="help-content" id="help-content-box">
 <div class="help-tab-row">
 <div class="help-tab active" id="htab-ask" onclick="switchHelpTab('ask')">? 문의하기</div>
-<div class="help-tab" id="htab-info" onclick="switchHelpTab('info')">! 설명하기</div>
+<div class="help-tab" id="htab-info" onclick="switchHelpTab('info')">! 설명보기</div>
 <span onclick="toggleHelp()" class="help-close">✕</span>
 </div>
 <div id="hpanel-ask" class="help-panel">
-<p style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.7;margin-bottom:14px;">
-사용 중 불편한 점이나 건의사항을<br>
-카카오톡 오픈채팅으로 알려주세요!
-</p>
-<div class="help-notice">
-🔒 이 앱은 GPX 데이터를 외부 서버로 전송하지 않아요.<br>
-모든 기록은 <b>오직 내 핸드폰 안에서만</b> 저장되고 열람돼요.
-</div>
-<a href="https://open.kakao.com/o/gwg21Cni" target="_blank" class="help-link">
-💬 카카오톡 오픈채팅 문의
-</a>
+<p style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.7;margin-bottom:14px;">사용 중 불편한 점이나 건의사항은<br>카카오톡 오픈채팅으로 들려주세요</p>
+<div class="help-notice">현재 저장된 GPX 데이터는 서버로 전송되지 않아요.<br>모든 기록은 <b>오직 이 기기 안에서만</b> 저장되고 보여져요.</div>
+<a href="https://open.kakao.com/o/gwg21Cni" target="_blank" class="help-link">💬 카카오톡 오픈채팅 문의</a>
 </div>
 <div id="hpanel-info" class="help-panel" style="display:none;">
 <div class="help-guide-list">
-<div class="help-guide-item">
-<div class="help-guide-icon red-dot"></div>
-<div class="help-guide-text"><b>녹화 버튼</b><br><span>누르면 GPS 경로 기록 시작. 다시 누르면 중지.</span></div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon photo-icon">
-<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 0 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-<circle cx="12" cy="13" r="4"/>
-</svg>
-</div>
-<div class="help-guide-text"><b>사진 버튼</b><br><span>지금 찍기 또는 갤러리에서 여러 장 불러오기.</span></div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon star-icon">★</div>
-<div class="help-guide-text"><b>마킹 버튼</b><br><span>현재 위치에 이름을 붙여 기억으로 저장해요.</span></div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon blue-dot"></div>
-<div class="help-guide-text"><b>현재 위치 버튼</b><br><span>지도를 내 현재 위치로 이동시켜요.</span></div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon person-icon">
-<svg width="16" height="16" viewBox="0 0 26 26" fill="none">
-<circle cx="13" cy="9" r="4.5" stroke="white" stroke-width="1.6"/>
-<path d="M3.5 23c0-5.247 4.253-8.5 9.5-8.5s9.5 3.253 9.5 8.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
-</svg>
-</div>
-<div class="help-guide-text"><b>내 상태 버튼 (하단 중앙)</b><br><span>칭호·레벨·진행도를 확인할 수 있어요.</span></div>
-</div>
-<div class="help-guide-item">
-<div class="help-guide-icon menu-icon">☰</div>
-<div class="help-guide-text"><b>메뉴 버튼 (상단 왼쪽)</b><br><span>기억·사진·발걸음 목록을 볼 수 있어요.</span></div>
-</div>
+<div class="help-guide-item"><div class="help-guide-icon red-dot"></div><div class="help-guide-text"><b>녹화 버튼</b><br><span>누르면 GPS 경로 기록 시작. 다시 누르면 중지.</span></div></div>
+<div class="help-guide-item"><div class="help-guide-icon photo-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div><div class="help-guide-text"><b>사진 버튼</b><br><span>지금 찍기 또는 갤러리에서 사진을 불러와 저장해요.</span></div></div>
+<div class="help-guide-item"><div class="help-guide-icon star-icon">★</div><div class="help-guide-text"><b>별표 버튼</b><br><span>현재 위치에 이름을 붙여 기억으로 남겨요.</span></div></div>
+<div class="help-guide-item"><div class="help-guide-icon blue-dot"></div><div class="help-guide-text"><b>현재 위치 버튼</b><br><span>지도를 내 현재 위치로 다시 이동시켜요.</span></div></div>
+<div class="help-guide-item"><div class="help-guide-icon person-icon"><svg width="16" height="16" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="9" r="4.5" stroke="white" stroke-width="1.6"/><path d="M3.5 23c0-5.247 4.253-8.5 9.5-8.5s9.5 3.253 9.5 8.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg></div><div class="help-guide-text"><b>상태 버튼 (하단 중앙)</b><br><span>내 현재 칭호와 진행 상태를 확인할 수 있어요.</span></div></div>
+<div class="help-guide-item"><div class="help-guide-icon menu-icon">☰</div><div class="help-guide-text"><b>메뉴 버튼 (상단 왼쪽)</b><br><span>기억, 사진, 발걸음 목록을 볼 수 있어요.</span></div></div>
 </div>
 </div>
 </div>
 </div>
 
 <div id="hud">
-<div id="hud-handle" onclick="toggleHud()">
-<svg class="handle-bar" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-<circle cx="13" cy="9" r="4.5" stroke="white" stroke-width="1.6"/>
-<path d="M3.5 23c0-5.247 4.253-8.5 9.5-8.5s9.5 3.253 9.5 8.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
-</svg>
-</div>
+<div id="hud-handle" onclick="toggleHud()"><svg class="handle-bar" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="9" r="4.5" stroke="white" stroke-width="1.6"/><path d="M3.5 23c0-5.247 4.253-8.5 9.5-8.5s9.5 3.253 9.5 8.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg></div>
 <div id="hud-basic">
-<div id="hud-title-row">
-<div id="hud-title-wrap">
-<div id="hud-title-label">현재 칭호</div>
-<div id="hud-title-text">길 없는 자</div>
-</div>
-<div id="hud-level-wrap">
-<div id="hud-level-label">LV</div>
-<div id="hud-level-num">1</div>
-</div>
-</div>
+<div id="hud-title-row"><div id="hud-title-wrap"><div id="hud-title-label">현재 칭호</div><div id="hud-title-text">길 없는 자</div></div><div id="hud-level-wrap"><div id="hud-level-label">LV</div><div id="hud-level-num">1</div></div></div>
 <div id="hud-progress-row">
-<div class="hud-prog-item">
-<div class="hud-prog-label">이동 거리</div>
-<div class="hud-prog-current" id="prog-dist-cur">0.00 km</div>
-<div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-dist-bar" style="width:0%;background:#4db8ff;"></div></div>
-<div class="hud-prog-next" id="prog-dist-next">다음까지 —</div>
-</div>
-<div class="hud-prog-item">
-<div class="hud-prog-label">기억 저장</div>
-<div class="hud-prog-current" id="prog-mem-cur">0 개</div>
-<div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-mem-bar" style="width:0%;background:#ffd84d;"></div></div>
-<div class="hud-prog-next" id="prog-mem-next">다음까지 —</div>
-</div>
-<div class="hud-prog-item">
-<div class="hud-prog-label">사진 저장</div>
-<div class="hud-prog-current" id="prog-photo-cur">0 개</div>
-<div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-photo-bar" style="width:0%;background:#a78bfa;"></div></div>
-<div class="hud-prog-next" id="prog-photo-next">다음까지 —</div>
-</div>
+<div class="hud-prog-item"><div class="hud-prog-label">이동 거리</div><div class="hud-prog-current" id="prog-dist-cur">0.00 km</div><div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-dist-bar" style="width:0%;background:#4db8ff;"></div></div><div class="hud-prog-next" id="prog-dist-next">다음까지 0km</div></div>
+<div class="hud-prog-item"><div class="hud-prog-label">기억 개수</div><div class="hud-prog-current" id="prog-mem-cur">0 개</div><div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-mem-bar" style="width:0%;background:#ffd84d;"></div></div><div class="hud-prog-next" id="prog-mem-next">다음까지 0개</div></div>
+<div class="hud-prog-item"><div class="hud-prog-label">사진 개수</div><div class="hud-prog-current" id="prog-photo-cur">0 개</div><div class="hud-prog-bar-wrap"><div class="hud-prog-bar" id="prog-photo-bar" style="width:0%;background:#a78bfa;"></div></div><div class="hud-prog-next" id="prog-photo-next">다음까지 0개</div></div>
 </div>
 </div>
 </div>
@@ -257,13 +140,7 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="./script.js"></script>
 <script>
-if ("serviceWorker" in navigator) {
-window.addEventListener("load", () => {
-navigator.serviceWorker.register("./sw.js")
-.then(() => console.log("SW 등록 완료"))
-.catch(e => console.warn("SW 등록 실패", e));
-});
-}
+if ("serviceWorker" in navigator) { window.addEventListener("load", function() { navigator.serviceWorker.register("./sw.js").then(function() { console.log("SW 등록 완료"); }).catch(function(e) { console.warn("SW 등록 실패", e); }); }); }
 </script>
 </body>
 </html>
